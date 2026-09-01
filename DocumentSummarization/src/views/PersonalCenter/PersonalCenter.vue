@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 const form = reactive({
   username: 'demo-user',
   displayName: '唐诗雨',
-  email: 'demo@example.com',
+  gitName: 'baiyu21',
   role: '管理员',
   projects: '全部项目',
 })
@@ -20,44 +20,59 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
 <template>
   <div class="page">
     <header class="page-header">
-      <h1>个人中心</h1>
-      <p>查看与修改个人资料，管理用于拉取私有仓库的访问凭证。</p>
+      <h1>基本信息</h1>
     </header>
 
     <div class="page-body">
-      <!-- 左侧：资料表单 -->
       <section class="card">
         <div class="card-title">基本信息</div>
-        <div class="form-grid">
-          <label class="field">
-            <span>用户名</span>
-            <input v-model="form.username" class="input" />
-          </label>
-          <label class="field">
-            <span>显示名</span>
-            <input v-model="form.displayName" class="input" />
-          </label>
-          <label class="field">
-            <span>邮箱</span>
-            <input v-model="form.email" class="input" />
-          </label>
-          <label class="field">
-            <span>角色</span>
-            <input v-model="form.role" class="input" readonly />
-          </label>
-          <label class="field full">
-            <span>可访问项目</span>
-            <input v-model="form.projects" class="input" />
-          </label>
+        <div class="card-body">
+          <!-- 左侧头像 -->
+          <div class="avatar-wrap">
+            <div class="avatar">
+              <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="40" r="22" fill="#e0e7ff" />
+                <ellipse cx="50" cy="85" rx="30" ry="18" fill="#e0e7ff" />
+                <circle cx="42" cy="38" r="3" fill="#4b5563" />
+                <circle cx="58" cy="38" r="3" fill="#4b5563" />
+                <path d="M42 48 Q50 54 58 48" stroke="#4b5563" stroke-width="2" fill="none" stroke-linecap="round" />
+              </svg>
+            </div>
+            <span class="avatar-tip">默认头像</span>
+          </div>
+          <!-- 右侧信息 -->
+          <div class="info-area">
+            <div class="form-grid">
+              <label class="field">
+                <span>用户名</span>
+                <input v-model="form.username" class="input" />
+              </label>
+              <label class="field">
+                <span>显示名</span>
+                <input v-model="form.displayName" class="input" />
+              </label>
+              <label class="field">
+                <span>git名字</span>
+                <input v-model="form.gitName" class="input" />
+              </label>
+              <label class="field">
+                <span>角色</span>
+                <input v-model="form.role" class="input" readonly />
+              </label>
+              <label class="field">
+                <span>可访问项目</span>
+                <input v-model="form.projects" class="input" />
+              </label>
+            </div>
+            <button class="btn-primary" @click="save">保存资料</button>
+          </div>
         </div>
-        <button class="btn-primary" @click="save">保存资料</button>
       </section>
 
-      <!-- 右侧：Token -->
+      <!-- 右侧：Token  -->
       <section class="card">
         <div class="card-title">访问令牌（脱敏）</div>
         <input :value="token" class="input-token" readonly />
-        <p class="hint">用于同步私有仓库，正式环境仅服务端加密存储。</p>
         <div class="btn-row">
           <button class="btn-primary small" @click="updateToken">更新 Token</button>
           <button class="btn-danger small" @click="deleteToken">删除 Token</button>
@@ -87,7 +102,7 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
 
 .page-body {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1.5fr 1fr;
   gap: 20px;
 }
 
@@ -95,32 +110,69 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 24px;
-  min-width: 600px;
+  padding: 24px 28px;
 }
 
 .card-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: #374151;
-  margin-bottom: 18px;
+  color: #111827;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.card-body {
+  display: flex;
+  gap: 48px;
+  align-items: flex-start;
+}
+
+.avatar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f5f3ff;
+  border: 2px solid #e0e7ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar svg {
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-tip {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.info-area {
+  flex: 1;
+  min-width: 0;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 18px 28px;
+  margin-bottom: 24px;
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.field.full {
-  grid-column: 1 / -1;
 }
 
 .field > span {
