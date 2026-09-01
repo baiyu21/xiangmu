@@ -21,7 +21,16 @@ const navItems: NavItem[] = [
   { path: '/app/ai-qa', name: 'ai-qa', label: 'AI 问答', subtitle: '按项目' },
 ]
 
-const activeName = computed(() => route.name)
+const activeName = computed(() => {
+  if (
+    route.name === 'project-overview' ||
+    route.name === 'project-file' ||
+    route.name === 'project-record'
+  ) {
+    return 'projects'
+  }
+  return route.name
+})
 const displayName = computed(() => userStore.profile?.displayName || '未登录')
 const username = computed(() => userStore.profile?.username || '-')
 
