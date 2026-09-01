@@ -12,7 +12,7 @@ const messages = ref<Msg[]>([
   {
     role: 'assistant',
     content:
-      '你好！我已加载 **A 文档库** 中的 128 份文档。\n你可以问我：\n• 这份需求文档的核心目标是什么？\n• 帮我总结最近一次版本更新\n• 文档中提到的性能指标有哪些？',
+      `你好！我已加载 **${project.value}** 中的 128 份文档。\n你可以问我：\n• 这份需求文档的核心目标是什么？\n• 帮我总结最近一次版本更新\n• 文档中提到的性能指标有哪些？`,
   },
 ])
 const bottomRef = ref<HTMLElement>()
