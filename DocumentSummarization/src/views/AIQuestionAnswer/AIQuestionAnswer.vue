@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+import { PageState } from '@/components'
+import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 
 interface Msg {
   role: 'user' | 'assistant'
@@ -8,14 +10,10 @@ interface Msg {
 
 const project = ref('A 文档库')
 const input = ref('')
-const messages = ref<Msg[]>([
-  {
-    role: 'assistant',
-    content:
-      `你好！我已加载 **${project.value}** 中的 128 份文档。\n你可以问我：\n• 这份需求文档的核心目标是什么？\n• 帮我总结最近一次版本更新\n• 文档中提到的性能指标有哪些？`,
-  },
-])
+const status = ref<PageLoadStatus>('loading')
+const messages = ref<Msg[]>([])
 const bottomRef = ref<HTMLElement>()
+const sending = ref(false)
 
 const suggestions = [
   '帮我总结一下这个项目的核心内容',
@@ -23,20 +21,50 @@ const suggestions = [
   '查找提到"性能"的段落',
 ]
 
+const projects = ['A 文档库', 'B 合同集', 'C 财务报告', 'D 会议纪要']
+
+async function bootstrapChat(forceError = false) {
+  status.value = 'loading'
+  messages.value = []
+  await new Promise((r) => setTimeout(r, 350))
+  if (forceError) {
+    status.value = 'error'
+    return
+  }
+  messages.value = [
+    {
+      role: 'assistant',
+      content: `你好！我已加载 **${project.value}** 中的文档。\n你可以问我：\n• 这份需求文档的核心目标是什么？\n• 帮我总结最近一次版本更新\n• 文档中提到的性能指标有哪些？`,
+    },
+  ]
+  status.value = 'ready'
+}
+
+function selectProject(name: string) {
+  project.value = name
+  void bootstrapChat()
+}
+
 const send = () => {
   const text = input.value.trim()
-  if (!text) return
+  if (!text || sending.value || status.value !== 'ready') return
   messages.value.push({ role: 'user', content: text })
   input.value = ''
-  // 模拟回复
+  sending.value = true
   setTimeout(() => {
     messages.value.push({
       role: 'assistant',
       content:
         '（示例回复）我在文档库中找到了 3 处相关内容，核心要点如下：\n1. ...\n2. ...\n3. ...\n\n可以继续追问，或点击引用查看原文。',
     })
+    sending.value = false
     nextTick(() => bottomRef.value?.scrollIntoView({ behavior: 'smooth' }))
   }, 500)
+}
+
+const applySuggestion = (text: string) => {
+  input.value = text
+  send()
 }
 
 const onKey = (e: KeyboardEvent) => {
@@ -45,6 +73,10 @@ const onKey = (e: KeyboardEvent) => {
     send()
   }
 }
+
+onMounted(() => {
+  void bootstrapChat()
+})
 </script>
 
 <template>
@@ -55,33 +87,49 @@ const onKey = (e: KeyboardEvent) => {
     </header>
 
     <div class="qa-layout">
-      <!-- 左侧：项目选择 -->
       <aside class="sidebar-panel">
         <div class="panel-title">选择项目</div>
-        <button class="proj-btn active">A 文档库</button>
-        <button class="proj-btn">B 合同集</button>
-        <button class="proj-btn">C 财务报告</button>
-        <button class="proj-btn">D 会议纪要</button>
+        <button
+          v-for="name in projects"
+          :key="name"
+          type="button"
+          class="proj-btn"
+          :class="{ active: project === name }"
+          @click="selectProject(name)"
+        >
+          {{ name }}
+        </button>
+        <button type="button" class="btn-ghost" @click="bootstrapChat(true)">模拟失败</button>
       </aside>
 
-      <!-- 右侧：对话区 -->
       <section class="chat">
-        <div class="messages">
-          <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
-            <div class="avatar">{{ m.role === 'user' ? '你' : 'AI' }}</div>
-            <div class="bubble">
-              <pre>{{ m.content }}</pre>
+        <PageState
+          :status="status"
+          error-text="对话上下文加载失败"
+          empty-text="暂无消息"
+          @retry="bootstrapChat(false)"
+        >
+          <div class="messages">
+            <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
+              <div class="avatar">{{ m.role === 'user' ? '你' : 'AI' }}</div>
+              <div class="bubble">
+                <pre>{{ m.content }}</pre>
+              </div>
             </div>
+            <div v-if="sending" class="msg assistant">
+              <div class="avatar">AI</div>
+              <div class="bubble"><pre>正在思考…</pre></div>
+            </div>
+            <div ref="bottomRef"></div>
           </div>
-          <div ref="bottomRef"></div>
-        </div>
+        </PageState>
 
-        <!-- 输入区 -->
         <div class="composer">
           <textarea
             v-model="input"
             placeholder="向 AI 提问…（Enter 发送，Shift+Enter 换行）"
             rows="2"
+            :disabled="status !== 'ready'"
             @keydown="onKey"
           ></textarea>
           <div class="composer-actions">
@@ -89,13 +137,22 @@ const onKey = (e: KeyboardEvent) => {
               <button
                 v-for="s in suggestions"
                 :key="s"
+                type="button"
                 class="chip"
-                @click="input = s; send()"
+                :disabled="status !== 'ready'"
+                @click="applySuggestion(s)"
               >
                 {{ s }}
               </button>
             </div>
-            <button class="btn-primary" @click="send">发送</button>
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="status !== 'ready' || sending"
+              @click="send"
+            >
+              发送
+            </button>
           </div>
         </div>
       </section>
@@ -165,6 +222,22 @@ const onKey = (e: KeyboardEvent) => {
   font-weight: 500;
 }
 
+.btn-ghost {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #fff;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
 /* 对话区 */
 .chat {
   background: #fff;
@@ -173,6 +246,10 @@ const onKey = (e: KeyboardEvent) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.chat :deep(.state) {
+  flex: 1;
 }
 
 .messages {

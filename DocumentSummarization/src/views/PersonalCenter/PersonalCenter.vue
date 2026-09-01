@@ -1,20 +1,41 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 const form = reactive({
-  username: 'demo-user',
-  displayName: '唐诗雨',
+  username: userStore.profile?.username || 'demo-user',
+  displayName: userStore.profile?.displayName || '演示用户',
   email: 'demo@example.com',
   role: '管理员',
   projects: '全部项目',
 })
 
-const token = 'ghp_************************'
+watch(
+  () => userStore.profile,
+  (profile) => {
+    if (!profile) return
+    form.username = profile.username
+    form.displayName = profile.displayName
+  },
+)
 
-const save = () => ElMessage.success('资料已保存')
-const updateToken = () => ElMessage.info('Token 更新功能待接入')
-const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
+const maskedToken = 'ghp_************************'
+
+const save = () => {
+  if (userStore.token) {
+    userStore.setSession({
+      token: userStore.token,
+      username: form.username.trim() || form.username,
+      displayName: form.displayName.trim() || form.username,
+    })
+  }
+  ElMessage.success('资料已保存（本地会话）')
+}
+const updateToken = () => ElMessage.info('Token 更新功能待接入后端')
+const deleteToken = () => ElMessage.warning('Token 删除功能待接入后端')
 </script>
 
 <template>
@@ -25,7 +46,6 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
     </header>
 
     <div class="page-body">
-      <!-- 左侧：资料表单 -->
       <section class="card">
         <div class="card-title">基本信息</div>
         <div class="form-grid">
@@ -50,17 +70,16 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
             <input v-model="form.projects" class="input" />
           </label>
         </div>
-        <button class="btn-primary" @click="save">保存资料</button>
+        <button type="button" class="btn-primary" @click="save">保存资料</button>
       </section>
 
-      <!-- 右侧：Token -->
       <section class="card">
-        <div class="card-title">访问令牌（脱敏）</div>
-        <input :value="token" class="input-token" readonly />
-        <p class="hint">用于同步私有仓库，正式环境仅服务端加密存储。</p>
+        <div class="card-title">访问令牌（脱敏占位）</div>
+        <input :value="maskedToken" class="input" readonly />
+        <p class="hint">用于同步私有仓库，正式环境仅服务端加密存储；当前为占位展示。</p>
         <div class="btn-row">
-          <button class="btn-primary small" @click="updateToken">更新 Token</button>
-          <button class="btn-danger small" @click="deleteToken">删除 Token</button>
+          <button type="button" class="btn-primary small" @click="updateToken">更新 Token</button>
+          <button type="button" class="btn-danger small" @click="deleteToken">删除 Token</button>
         </div>
       </section>
     </div>

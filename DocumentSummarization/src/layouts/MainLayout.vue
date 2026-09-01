@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute, RouterView } from 'vue-router'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 
 interface NavItem {
   path: string
@@ -20,9 +22,12 @@ const navItems: NavItem[] = [
 ]
 
 const activeName = computed(() => route.name)
+const displayName = computed(() => userStore.profile?.displayName || '未登录')
+const username = computed(() => userStore.profile?.username || '-')
 
 const handleLogout = () => {
-  router.push({ name: 'login' })
+  userStore.clearAuth()
+  void router.push({ name: 'login' })
 }
 </script>
 
@@ -58,10 +63,10 @@ const handleLogout = () => {
 
       <!-- 底部用户卡 -->
       <div class="user-card">
-        <div class="user-avatar"></div>
+        <div class="user-avatar">{{ userStore.avatarLetter }}</div>
         <div class="user-info">
-          <div class="user-name"></div>
-          <div class="user-handle"></div>
+          <div class="user-name">{{ displayName }}</div>
+          <div class="user-handle">@{{ username }}</div>
         </div>
         <button class="logout-btn" @click="handleLogout" title="退出">退出</button>
       </div>

@@ -1,2 +1,1 @@
-/** Shared UI components — add exports here as components are created. */
-export {}
+export { default as PageState } from './PageState.vue'
