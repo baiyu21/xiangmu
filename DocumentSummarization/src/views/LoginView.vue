@@ -2,9 +2,11 @@
 import { ref, reactive, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 
 const activeTab = ref<'login' | 'register'>('login')
 
@@ -35,8 +37,17 @@ const validateLogin = () => {
 
 const handleLogin = () => {
   if (!validateLogin()) return
+
+  const username = loginForm.username.trim()
+  userStore.setSession({
+    token: `mock-token-${Date.now()}`,
+    username,
+    displayName: username,
+  })
+
   ElMessage.success('登录成功')
-  router.push({ name: 'personal' })
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+  void router.push(redirect || { name: 'personal' })
 }
 
 // ===== 注册表单 =====
@@ -59,9 +70,9 @@ const validateRegister = () => {
 const handleRegister = () => {
   if (!validateRegister()) return
   ElMessage.success('注册成功，请登录')
+  loginForm.username = registerForm.username.trim()
   switchTab('login')
 }
-
 </script>
 
 <template>

@@ -1,9 +1,54 @@
 <script setup lang="ts">
-const users = [
+import { computed, ref } from 'vue'
+import { PageState } from '@/components'
+import { useMockPageLoad } from '@/utils/useMockPageLoad'
+
+interface UserRow {
+  id: number
+  name: string
+  role: string
+  email: string
+  projects: string
+  status: string
+}
+
+const MOCK_USERS: UserRow[] = [
   { id: 1, name: '唐诗雨', role: '管理员', email: 'demo@example.com', projects: '全部项目', status: '活跃' },
   { id: 2, name: '李明', role: '项目成员', email: 'liming@example.com', projects: 'A 文档库、B 合同集', status: '活跃' },
   { id: 3, name: '王芳', role: '只读成员', email: 'wangfang@example.com', projects: 'B 合同集', status: '活跃' },
 ]
+
+const keyword = ref('')
+const forceError = ref(false)
+
+const { status, data, reload } = useMockPageLoad<UserRow>({
+  delayMs: 350,
+  fetchData: async () => {
+    if (forceError.value) {
+      forceError.value = false
+      throw new Error('mock load failed')
+    }
+    return MOCK_USERS
+  },
+})
+
+const filtered = computed(() => {
+  const q = keyword.value.trim().toLowerCase()
+  if (!q) return data.value
+  return data.value.filter(
+    (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
+  )
+})
+
+const viewStatus = computed(() => {
+  if (status.value !== 'ready') return status.value
+  return filtered.value.length === 0 ? 'empty' : 'ready'
+})
+
+function simulateError() {
+  forceError.value = true
+  void reload()
+}
 </script>
 
 <template>
@@ -15,35 +60,49 @@ const users = [
 
     <section class="card">
       <div class="toolbar">
-        <input class="input search" placeholder="搜索用户名 / 邮箱" />
-        <button class="btn-primary">＋ 新建用户</button>
+        <input
+          v-model="keyword"
+          class="input search"
+          placeholder="搜索用户名 / 邮箱"
+        />
+        <div class="toolbar-actions">
+          <button type="button" class="btn-ghost" @click="simulateError">模拟失败</button>
+          <button type="button" class="btn-primary">＋ 新建用户</button>
+        </div>
       </div>
 
-      <table class="table">
-        <thead>
-          <tr>
-            <th>用户名</th>
-            <th>邮箱</th>
-            <th>角色</th>
-            <th>可访问项目</th>
-            <th>状态</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="u in users" :key="u.id">
-            <td class="name">{{ u.name }}</td>
-            <td>{{ u.email }}</td>
-            <td><span class="tag">{{ u.role }}</span></td>
-            <td class="muted">{{ u.projects }}</td>
-            <td><span class="status-dot"></span> {{ u.status }}</td>
-            <td class="actions">
-              <button class="link">编辑</button>
-              <button class="link danger">删除</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <PageState
+        :status="viewStatus"
+        empty-text="没有匹配的用户"
+        error-text="用户列表加载失败"
+        @retry="reload"
+      >
+        <table class="table">
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>邮箱</th>
+              <th>角色</th>
+              <th>可访问项目</th>
+              <th>状态</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in filtered" :key="u.id">
+              <td class="name">{{ u.name }}</td>
+              <td>{{ u.email }}</td>
+              <td><span class="tag">{{ u.role }}</span></td>
+              <td class="muted">{{ u.projects }}</td>
+              <td><span class="status-dot"></span> {{ u.status }}</td>
+              <td class="actions">
+                <button type="button" class="link">编辑</button>
+                <button type="button" class="link danger">删除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </PageState>
     </section>
   </div>
 </template>
@@ -74,6 +133,13 @@ const users = [
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  gap: 12px;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .input {
@@ -105,7 +171,24 @@ const users = [
   cursor: pointer;
 }
 
-.btn-primary:hover { background: #0d9488; }
+.btn-primary:hover {
+  background: #0d9488;
+}
+
+.btn-ghost {
+  padding: 9px 14px;
+  background: #fff;
+  color: #6b7280;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  border-color: #fca5a5;
+  color: #dc2626;
+}
 
 .table {
   width: 100%;
@@ -178,7 +261,13 @@ const users = [
   padding: 0;
 }
 
-.link:hover { text-decoration: underline; }
-.link.danger { color: #dc2626; }
-.link.danger:hover { color: #b91c1c; }
+.link:hover {
+  text-decoration: underline;
+}
+.link.danger {
+  color: #dc2626;
+}
+.link.danger:hover {
+  color: #b91c1c;
+}
 </style>

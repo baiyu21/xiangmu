@@ -1,73 +1,61 @@
-# DocumentSummarization
+# Document Summarization（前端）
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + Vite + TypeScript 文档智能摘要系统前端工程。
 
-## Recommended IDE Setup
+## 技术栈
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- Vue 3 / Vue Router / Pinia / Element Plus
+- Vite 8 / TypeScript
+- axios 请求封装（`src/api/request.ts`）
+- ESLint + oxlint + Prettier
+- Vitest（单测）/ Playwright（E2E，可选）
 
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## 一条命令跑起来
 
 ```sh
-npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
+cd DocumentSummarization
+cp .env.example .env.development
+npm ci
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+浏览器打开控制台提示的本地地址（默认 `http://localhost:5173`）。
 
-```sh
-npm run build
+## 常用脚本
+
+| 命令 | 说明 |
+|------|------|
+| `npm run dev` | 本地开发 |
+| `npm run build` | 类型检查 + 生产构建 |
+| `npm run lint` | ESLint + oxlint |
+| `npm run test` | Vitest 单测 |
+| `npm run test:e2e` | Playwright E2E |
+
+## 目录约定
+
+```
+src/
+  api/          # 请求封装与接口模块
+  components/   # 可复用组件
+  stores/       # Pinia stores
+  utils/        # 工具函数
+  styles/       # 全局样式与设计 token
+  layouts/      # 布局
+  router/       # 路由
+  views/        # 页面
 ```
 
-### Run Unit Tests with [Vitest](https://vitest.dev/)
+## 环境变量
 
-```sh
-npm run test:unit
-```
+只提交 `.env.example`。本地复制为 `.env.development` 后按需修改：
 
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
+- `VITE_API_BASE_URL`：后端 API 根路径
+- `VITE_APP_TITLE`：应用标题
 
-```sh
-# Install browsers for the first run
-npx playwright install
+## Git 提交
 
-# When testing on CI, must build the project first
-npm run build
+使用 Conventional Commits：`feat|fix|refactor|test|chore|docs|style|perf|ci`。
 
-# Runs the end-to-end tests
-npm run test:e2e
-# Runs the tests only on Chromium
-npm run test:e2e -- --project=chromium
-# Runs the tests of a specific file
-npm run test:e2e -- tests/example.spec.ts
-# Runs the tests in debug mode
-npm run test:e2e -- --debug
-```
+示例：`feat: add axios request wrapper`
 
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-npm run lint
-```
+husky 会在 `npm install`（`prepare`）时把 hooks 挂到仓库根目录。若本机未识别 git，请确保 PATH 中有 git 后重新执行一次 `npm install`。

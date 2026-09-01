@@ -1,0 +1,2 @@
+cd DocumentSummarization || exit 1
+npx --no -- commitlint --edit "$1"
