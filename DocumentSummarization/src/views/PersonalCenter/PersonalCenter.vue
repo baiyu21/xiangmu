@@ -56,7 +56,7 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
       <!-- 右侧：Token -->
       <section class="card">
         <div class="card-title">访问令牌（脱敏）</div>
-        <input :value="token" class="input" readonly />
+        <input :value="token" class="input-token" readonly />
         <p class="hint">用于同步私有仓库，正式环境仅服务端加密存储。</p>
         <div class="btn-row">
           <button class="btn-primary small" @click="updateToken">更新 Token</button>
@@ -96,6 +96,7 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 24px;
+  min-width: 600px;
 }
 
 .card-title {
@@ -140,6 +141,7 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
   box-sizing: border-box;
 }
 
+
 .input:focus {
   border-color: #0f766e;
 }
@@ -148,6 +150,21 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入')
   background: #f9fafb;
   color: #6b7280;
 }
+
+.input-token {
+  padding: 10px 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 14px;
+
+  color: #111827;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+
 
 .btn-primary {
   padding: 11px 20px;
