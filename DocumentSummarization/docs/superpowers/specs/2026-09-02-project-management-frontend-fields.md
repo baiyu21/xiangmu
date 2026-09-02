@@ -154,9 +154,7 @@ GET  /api/projects/{projectId}/files/{fileId}/records/{docId}/download  # 返回
 | `author` | `string` | ✅ | 发表人显示名 |
 | `role` | `string` | ✅ | 角色标识，如 `customer`（前端展示可用） |
 | `content` | `string` | ✅ | 注释正文 |
-| `at` | `string` | ✅ | 发表时间 `YYYY-MM-DD HH:mm` |
 
-### 4.1 发表注释（请求体）
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
