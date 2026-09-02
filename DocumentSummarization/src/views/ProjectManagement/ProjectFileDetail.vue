@@ -356,7 +356,7 @@ function submitComment() {
 }
 .history-wrap {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: minmax(260px, 34%) 1fr;
   min-height: 360px;
 }
 .history-list {
@@ -365,9 +365,9 @@ function submitComment() {
 }
 .tl-item {
   display: grid;
-  grid-template-columns: 148px 1fr;
-  gap: 14px;
-  padding: 16px;
+  grid-template-columns: 112px 1fr;
+  gap: 12px;
+  padding: 14px;
   border: none;
   border-bottom: 1px solid #e5e7eb;
   background: #fff;

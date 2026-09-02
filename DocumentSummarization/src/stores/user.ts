@@ -7,6 +7,7 @@ const PROFILE_KEY = 'ds_profile'
 export interface UserProfile {
   username: string
   displayName: string
+  email?: string
 }
 
 function readProfile(): UserProfile | null {

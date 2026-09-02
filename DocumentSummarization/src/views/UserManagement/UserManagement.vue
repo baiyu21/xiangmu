@@ -1,35 +1,32 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { PageState } from '@/components'
 import { useMockPageLoad } from '@/utils/useMockPageLoad'
+import EditUserManagement from './EditUserManagement.vue'
 
 interface UserRow {
   id: number
   name: string
   role: string
+  gitName: string
   email: string
   projects: string
   status: string
 }
 
 const MOCK_USERS: UserRow[] = [
-  { id: 1, name: '唐诗雨', role: '管理员', email: 'demo@example.com', projects: '全部项目', status: '活跃' },
-  { id: 2, name: '李明', role: '项目成员', email: 'liming@example.com', projects: 'A 文档库、B 合同集', status: '活跃' },
-  { id: 3, name: '王芳', role: '只读成员', email: 'wangfang@example.com', projects: 'B 合同集', status: '活跃' },
+  { id: 1, name: '李明', role: '项目成员', gitName: 'liming', email: 'liming@example.com', projects: 'rd-xmz', status: '启用' },
+  { id: 2, name: '王芳', role: '只读成员', gitName: 'wangfang', email: 'wangfang@example.com', projects: 'school-portal', status: '启用' },
 ]
 
 const keyword = ref('')
-const forceError = ref(false)
+const dialogOpen = ref(false)
+const editing = ref<UserRow | null>(null)
 
 const { status, data, reload } = useMockPageLoad<UserRow>({
   delayMs: 350,
-  fetchData: async () => {
-    if (forceError.value) {
-      forceError.value = false
-      throw new Error('mock load failed')
-    }
-    return MOCK_USERS
-  },
+  fetchData: async () => MOCK_USERS,
 })
 
 const filtered = computed(() => {
@@ -45,9 +42,47 @@ const viewStatus = computed(() => {
   return filtered.value.length === 0 ? 'empty' : 'ready'
 })
 
-function simulateError() {
-  forceError.value = true
-  void reload()
+const ROLE_TAG_TYPE: Record<string, 'primary' | 'success' | 'warning' | 'info'> = {
+  管理员: 'warning',
+  项目成员: 'success',
+  只读成员: 'info',
+}
+
+function openCreate() {
+  editing.value = null
+  dialogOpen.value = true
+}
+
+function openEdit(row: UserRow) {
+  editing.value = { ...row }
+  dialogOpen.value = true
+}
+
+function onSubmit(payload: {
+  id?: number
+  name: string
+  email: string
+  gitName: string
+  role: string
+  projects: string
+  status: string
+}) {
+  if (payload.id != null) {
+    const idx = data.value.findIndex((u) => u.id === payload.id)
+    if (idx !== -1) {
+      data.value[idx] = { ...data.value[idx], ...payload, id: payload.id }
+    }
+    ElMessage.success('用户已更新')
+  } else {
+    const newId = data.value.length ? Math.max(...data.value.map((u) => u.id)) + 1 : 1
+    data.value.push({ ...payload, id: newId })
+    ElMessage.success('用户已创建')
+  }
+}
+
+async function toggleStatus(row: UserRow) {
+  row.status = row.status === '启用' ? '停用' : '启用'
+  ElMessage.success(`已${row.status} ${row.name}`)
 }
 </script>
 
@@ -60,50 +95,67 @@ function simulateError() {
 
     <section class="card">
       <div class="toolbar">
-        <input
+        <el-input
           v-model="keyword"
-          class="input search"
+          class="search"
           placeholder="搜索用户名 / 邮箱"
+          clearable
         />
-        <div class="toolbar-actions">
-          <button type="button" class="btn-ghost" @click="simulateError">模拟失败</button>
-          <button type="button" class="btn-primary">＋ 新建用户</button>
-        </div>
+        <el-button type="primary" @click="openCreate">＋ 新建用户</el-button>
       </div>
 
       <PageState
         :status="viewStatus"
-        empty-text="没有匹配的用户"
+        empty-text="暂无匹配的用户数据"
         error-text="用户列表加载失败"
         @retry="reload"
       >
-        <table class="table">
-          <thead>
-            <tr>
-              <th>用户名</th>
-              <th>邮箱</th>
-              <th>角色</th>
-              <th>可访问项目</th>
-              <th>状态</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="u in filtered" :key="u.id">
-              <td class="name">{{ u.name }}</td>
-              <td>{{ u.email }}</td>
-              <td><span class="tag">{{ u.role }}</span></td>
-              <td class="muted">{{ u.projects }}</td>
-              <td><span class="status-dot"></span> {{ u.status }}</td>
-              <td class="actions">
-                <button type="button" class="link">编辑</button>
-                <button type="button" class="link danger">删除</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <el-table :data="filtered" border stripe row-key="id">
+          <el-table-column label="序号" type="index" align="center" width="70" />
+          <el-table-column label="姓名" prop="name" min-width="100">
+            <template #default="{ row }">
+              <span class="name">{{ row.name }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="角色" prop="role" width="120">
+            <template #default="{ row }">
+              <el-tag :type="ROLE_TAG_TYPE[row.role] ?? 'primary'" effect="light" size="small">
+                {{ row.role }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="Git 用户名" prop="gitName" min-width="120" />
+          <el-table-column label="邮箱" prop="email" min-width="200" />
+          <el-table-column label="所属项目" prop="projects" min-width="140" />
+          <el-table-column label="状态" prop="status" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag
+                :type="row.status === '启用' ? 'success' : 'info'"
+                effect="light"
+                size="small"
+              >
+                {{ row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="180" fixed="right" align="center">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+              <el-button
+                link
+                :type="row.status === '启用' ? 'warning' : 'success'"
+                size="small"
+                @click="toggleStatus(row)"
+              >
+                {{ row.status === '启用' ? '停用' : '启用' }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </PageState>
     </section>
+
+    <EditUserManagement v-model:open="dialogOpen" :form-data="editing" @submit="onSubmit" />
   </div>
 </template>
 
@@ -118,7 +170,7 @@ function simulateError() {
 .page-header p {
   font-size: 14px;
   color: #6b7280;
-  margin: 0 0 24px;
+  margin: 0 0 20px;
 }
 
 .card {
@@ -136,138 +188,12 @@ function simulateError() {
   gap: 12px;
 }
 
-.toolbar-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.input {
-  padding: 9px 14px;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 10px;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
-}
-
-.input.search {
+.search {
   width: 280px;
-}
-
-.input:focus {
-  border-color: #0f766e;
-}
-
-.btn-primary {
-  padding: 9px 18px;
-  background: #0f766e;
-  color: #fff;
-  border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  background: #0d9488;
-}
-
-.btn-ghost {
-  padding: 9px 14px;
-  background: #fff;
-  color: #6b7280;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.btn-ghost:hover {
-  border-color: #fca5a5;
-  color: #dc2626;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-.table th {
-  text-align: left;
-  font-weight: 500;
-  color: #6b7280;
-  padding: 10px 12px;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 13px;
-}
-
-.table td {
-  padding: 14px 12px;
-  border-bottom: 1px solid #f3f4f6;
-  color: #374151;
-}
-
-.table tr:last-child td {
-  border-bottom: none;
-}
-
-.table tr:hover td {
-  background: #f9fafb;
 }
 
 .name {
   font-weight: 500;
   color: #111827;
-}
-
-.muted {
-  color: #6b7280;
-}
-
-.tag {
-  display: inline-block;
-  padding: 2px 10px;
-  background: #ecfdf5;
-  color: #0f766e;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.status-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #10b981;
-  margin-right: 6px;
-}
-
-.actions {
-  text-align: right;
-}
-
-.link {
-  background: none;
-  border: none;
-  color: #0f766e;
-  cursor: pointer;
-  font-size: 13px;
-  margin-left: 12px;
-  padding: 0;
-}
-
-.link:hover {
-  text-decoration: underline;
-}
-.link.danger {
-  color: #dc2626;
-}
-.link.danger:hover {
-  color: #b91c1c;
 }
 </style>
