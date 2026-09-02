@@ -152,11 +152,7 @@ GET  /api/projects/{projectId}/files/{fileId}/records/{docId}/download  # 返回
 |------|------|------|------|
 | `id` | `string` | ✅ | 注释 ID |
 | `author` | `string` | ✅ | 发表人显示名 |
-| `role` | `string` | ✅ | 角色标识，如 `customer`（前端展示可用） |
-| `content` | `string` | ✅ | 注释正文 |
-
-
-| 字段 | 类型 | 必填 | 说明 |
+| `role` | `string` | ✅ | 角色标识，如 `customer`（前
 |------|------|------|------|
 | `content` | `string` | ✅ | 注释内容（trim 后非空） |
 
@@ -164,9 +160,7 @@ GET  /api/projects/{projectId}/files/{fileId}/records/{docId}/download  # 返回
 
 ### 4.2 建议接口
 
-```text
-POST /api/projects/{projectId}/files/{fileId}/records/{docId}/comments
-     # body: { content }
+
      # response: ClientComment
 ```
 
