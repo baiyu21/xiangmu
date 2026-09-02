@@ -53,7 +53,7 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入后端')
             <div class="avatar">
               <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                 <circle cx="50" cy="40" r="22" fill="#e0e7ff" />
-                <ellipse cx="50" cy="85" rx="30" ry="18" fill="#e0e7ff" />
+                <ellipse cx="50" cy="85" rx="30" ry="18" fill="#2a3454ff" />
                 <circle cx="42" cy="38" r="3" fill="#4b5563" />
                 <circle cx="58" cy="38" r="3" fill="#4b5563" />
                 <path d="M42 48 Q50 54 58 48" stroke="#4b5563" stroke-width="2" fill="none" stroke-linecap="round" />
@@ -89,10 +89,9 @@ const deleteToken = () => ElMessage.warning('Token 删除功能待接入后端')
           </div>
         </div>
       </section>
-
       <section class="card">
         <div class="card-title">访问令牌（脱敏占位）</div>
-        <input :value="maskedToken" class="input" readonly />
+        <input :value="maskedToken" class="input"  />
         <p class="hint">用于同步私有仓库，正式环境仅服务端加密存储；当前为占位展示。</p>
         <div class="btn-row">
           <button type="button" class="btn-primary small" @click="updateToken">更新 Token</button>
