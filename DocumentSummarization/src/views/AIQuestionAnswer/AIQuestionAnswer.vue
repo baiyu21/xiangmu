@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
-import { PageState } from '@/components'
 import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 
 interface Msg {
@@ -21,7 +20,7 @@ const suggestions = [
   '查找提到"性能"的段落',
 ]
 
-const projects = ['A 文档库', 'B 合同集', 'C 财务报告', 'D 会议纪要']
+const projects = ['rd-xmz', 'school-portal']
 
 async function bootstrapChat(forceError = false) {
   status.value = 'loading'
@@ -99,16 +98,8 @@ onMounted(() => {
         >
           {{ name }}
         </button>
-        <button type="button" class="btn-ghost" @click="bootstrapChat(true)">模拟失败</button>
       </aside>
-
       <section class="chat">
-        <PageState
-          :status="status"
-          error-text="对话上下文加载失败"
-          empty-text="暂无消息"
-          @retry="bootstrapChat(false)"
-        >
           <div class="messages">
             <div v-for="(m, i) in messages" :key="i" class="msg" :class="m.role">
               <div class="avatar">{{ m.role === 'user' ? '你' : 'AI' }}</div>
@@ -122,8 +113,6 @@ onMounted(() => {
             </div>
             <div ref="bottomRef"></div>
           </div>
-        </PageState>
-
         <div class="composer">
           <textarea
             v-model="input"
