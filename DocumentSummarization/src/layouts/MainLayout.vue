@@ -21,7 +21,16 @@ const navItems: NavItem[] = [
   { path: '/app/personal', name: 'personal', label: '个人中心', subtitle: '资料' },
 ]
 
-const activeName = computed(() => route.name)
+const activeName = computed(() => {
+  if (
+    route.name === 'project-overview' ||
+    route.name === 'project-file' ||
+    route.name === 'project-record'
+  ) {
+    return 'projects'
+  }
+  return route.name
+})
 const displayName = computed(() => userStore.profile?.displayName || '未登录')
 const username = computed(() => userStore.profile?.username || '-')
 

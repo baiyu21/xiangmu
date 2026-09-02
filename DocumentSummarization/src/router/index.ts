@@ -43,6 +43,21 @@ const router = createRouter({
           component: () => import('../views/ProjectManagement/ProjectManagement.vue'),
         },
         {
+          path: 'projects/:id',
+          name: 'project-overview',
+          component: () => import('../views/ProjectManagement/ProjectOverview.vue'),
+        },
+        {
+          path: 'projects/:id/files/:fileId',
+          name: 'project-file',
+          component: () => import('../views/ProjectManagement/ProjectFileDetail.vue'),
+        },
+        {
+          path: 'projects/:id/files/:fileId/records/:docId',
+          name: 'project-record',
+          component: () => import('../views/ProjectManagement/ProjectChangeRecord.vue'),
+        },
+        {
           path: 'ai-qa',
           name: 'ai-qa',
           component: () => import('../views/AIQuestionAnswer/AIQuestionAnswer.vue'),
