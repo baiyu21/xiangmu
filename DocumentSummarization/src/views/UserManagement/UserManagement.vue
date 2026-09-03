@@ -146,48 +146,50 @@ onMounted(() => {
         error-text="用户列表加载失败"
         @retry="reload"
       >
-        <el-table :data="filtered" border stripe row-key="id">
-          <el-table-column label="序号" type="index" align="center" width="70" />
-          <el-table-column label="显示名" prop="name" min-width="100">
-            <template #default="{ row }">
-              <span class="name">{{ row.name }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="登录名" prop="username" min-width="120" />
-          <el-table-column label="角色" prop="role" width="120">
-            <template #default="{ row }">
-              <el-tag :type="ROLE_TAG_TYPE[row.role] ?? 'primary'" effect="light" size="small">
-                {{ roleLabel(row.role) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="邮箱" prop="email" min-width="200" />
-          <el-table-column label="状态" prop="status" width="100" align="center">
-            <template #default="{ row }">
-              <el-tag
-                :type="row.status === '启用' ? 'success' : 'info'"
-                effect="light"
-                size="small"
-              >
-                {{ row.status || '启用' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right" align="center">
-            <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
-              <el-button
-                link
-                :type="row.status === '启用' ? 'warning' : 'success'"
-                size="small"
-                :loading="togglingId === row.id"
-                @click="toggleStatus(row)"
-              >
-                {{ row.status === '启用' ? '停用' : '启用' }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="table-scroll">
+          <el-table :data="filtered" border stripe row-key="id" style="min-width: 720px">
+            <el-table-column label="序号" type="index" align="center" width="70" />
+            <el-table-column label="显示名" prop="name" min-width="100">
+              <template #default="{ row }">
+                <span class="name">{{ row.name }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="登录名" prop="username" min-width="120" />
+            <el-table-column label="角色" prop="role" width="120">
+              <template #default="{ row }">
+                <el-tag :type="ROLE_TAG_TYPE[row.role] ?? 'primary'" effect="light" size="small">
+                  {{ roleLabel(row.role) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="邮箱" prop="email" min-width="200" />
+            <el-table-column label="状态" prop="status" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag
+                  :type="row.status === '启用' ? 'success' : 'info'"
+                  effect="light"
+                  size="small"
+                >
+                  {{ row.status || '启用' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="180" fixed="right" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+                <el-button
+                  link
+                  :type="row.status === '启用' ? 'warning' : 'success'"
+                  size="small"
+                  :loading="togglingId === row.id"
+                  @click="toggleStatus(row)"
+                >
+                  {{ row.status === '启用' ? '停用' : '启用' }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </PageState>
     </section>
 
@@ -236,5 +238,24 @@ onMounted(() => {
 .name {
   font-weight: 500;
   color: #111827;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 14px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search {
+    width: 100%;
+  }
+
+  .toolbar .el-button {
+    width: 100%;
+  }
 }
 </style>

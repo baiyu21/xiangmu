@@ -69,6 +69,18 @@ function submit() {
   background: rgba(18, 26, 23, 0.35);
 }
 
+@media (max-width: 480px) {
+  .mask {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    border-radius: 14px 14px 0 0;
+  }
+}
+
 .modal {
   width: min(440px, 100%);
   background: #fff;

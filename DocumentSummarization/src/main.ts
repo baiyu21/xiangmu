@@ -1,6 +1,7 @@
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import './styles/tokens.css'
+import './styles/responsive.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

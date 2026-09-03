@@ -322,4 +322,28 @@ onMounted(() => {
   border-color: #0f766e;
   color: #0f766e;
 }
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn-primary,
+  .header-actions .btn-ghost {
+    flex: 1;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-url {
+    word-break: break-all;
+  }
+}
 </style>

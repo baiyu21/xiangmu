@@ -1,0 +1,40 @@
+/* 全局响应式基础 */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 页面通用容器：各业务页根节点多用 .page */
+.page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* 表格横向滚动容器（用户管理等） */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .page-header h1 {
+    font-size: 22px !important;
+  }
+
+  .page-header p {
+    font-size: 13px !important;
+  }
+}

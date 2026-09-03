@@ -561,4 +561,38 @@ function submitComment() {
 .btn-primary:hover {
   background: #0d9488;
 }
+
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat b.mod {
+    font-size: 14px;
+  }
+
+  .history-wrap {
+    grid-template-columns: 1fr !important;
+  }
+
+  .tl-item {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .form-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-foot .btn-primary {
+    width: 100%;
+  }
+}
 </style>

@@ -622,4 +622,26 @@ onUnmounted(() => {
   justify-content: flex-end;
   margin-top: 6px;
 }
+
+@media (max-width: 640px) {
+  .card :deep(.el-card__header),
+  .card :deep(.el-card__body) {
+    padding: 14px;
+  }
+
+  .profile-form :deep(.el-col) {
+    max-width: 100%;
+    flex: 0 0 100%;
+  }
+
+  .profile-form :deep(.el-form-item__label),
+  .pwd-form :deep(.el-form-item__label) {
+    width: 72px !important;
+  }
+
+  .profile-form :deep(.el-form-item__content),
+  .pwd-form :deep(.el-form-item__content) {
+    margin-left: 72px !important;
+  }
+}
 </style>

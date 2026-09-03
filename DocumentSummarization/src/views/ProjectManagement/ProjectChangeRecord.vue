@@ -264,4 +264,26 @@ function downloadMarkdown() {
 .comments .mono {
   margin-left: 8px;
 }
+
+@media (max-width: 640px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .header-actions .btn-primary,
+  .header-actions .btn-ghost {
+    flex: 1;
+  }
+
+  .shell {
+    padding: 16px;
+  }
+}
 </style>

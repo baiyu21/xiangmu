@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute, RouterView } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
@@ -22,6 +22,8 @@ const navItems: NavItem[] = [
   { path: '/app/personal', name: 'personal', label: '个人中心', subtitle: '资料' },
 ]
 
+const sidebarOpen = ref(false)
+
 const activeName = computed(() => {
   if (
     route.name === 'project-overview' ||
@@ -34,27 +36,55 @@ const activeName = computed(() => {
 })
 const displayName = computed(() => userStore.profile?.displayName || '未登录')
 const username = computed(() => userStore.profile?.username || '-')
+const pageTitle = computed(() => {
+  const item = navItems.find((n) => n.name === activeName.value)
+  return item?.label || '工作台'
+})
+
+watch(
+  () => route.fullPath,
+  () => {
+    sidebarOpen.value = false
+  },
+)
+
+function navigate(name: string) {
+  sidebarOpen.value = false
+  void router.push({ name })
+}
 
 const handleLogout = () => {
   userStore.clearAuth()
+  sidebarOpen.value = false
   void router.push({ name: 'login' })
 }
 </script>
 
 <template>
-  <div class="layout">
-    <!-- 侧边栏 -->
-    <aside class="sidebar">
-      <!-- Logo -->
+  <div class="layout" :class="{ 'sidebar-open': sidebarOpen }">
+    <div
+      class="sidebar-mask"
+      :class="{ show: sidebarOpen }"
+      @click="sidebarOpen = false"
+    ></div>
+
+    <aside class="sidebar" :class="{ open: sidebarOpen }">
       <div class="brand">
         <div class="logo">DS</div>
         <div class="brand-text">
           <span class="brand-name">doc-sum</span>
           <span class="brand-sub">document summarization</span>
         </div>
+        <button
+          type="button"
+          class="sidebar-close"
+          aria-label="关闭菜单"
+          @click="sidebarOpen = false"
+        >
+          ×
+        </button>
       </div>
 
-      <!-- 导航 -->
       <nav class="nav">
         <div class="nav-group">
           <span class="nav-group-title">工作台</span>
@@ -63,7 +93,7 @@ const handleLogout = () => {
             :key="item.name"
             class="nav-item"
             :class="{ active: activeName === item.name }"
-            @click="router.push({ name: item.name })"
+            @click="navigate(item.name)"
           >
             <span class="nav-label">{{ item.label }}</span>
             <span v-if="item.subtitle" class="nav-sub">{{ item.subtitle }}</span>
@@ -71,7 +101,6 @@ const handleLogout = () => {
         </div>
       </nav>
 
-      <!-- 底部用户卡 -->
       <div class="user-card">
         <div class="user-avatar">{{ userStore.avatarLetter }}</div>
         <div class="user-info">
@@ -82,10 +111,26 @@ const handleLogout = () => {
       </div>
     </aside>
 
-    <!-- 主内容区 -->
-    <main class="main">
-      <RouterView />
-    </main>
+    <div class="content">
+      <header class="mobile-bar">
+        <button
+          type="button"
+          class="menu-btn"
+          aria-label="打开菜单"
+          @click="sidebarOpen = true"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <div class="mobile-title">{{ pageTitle }}</div>
+        <div class="mobile-avatar">{{ userStore.avatarLetter }}</div>
+      </header>
+
+      <main class="main">
+        <RouterView />
+      </main>
+    </div>
   </div>
 </template>
 
@@ -96,7 +141,10 @@ const handleLogout = () => {
   background: #f4f6f8;
 }
 
-/* 侧边栏 */
+.sidebar-mask {
+  display: none;
+}
+
 .sidebar {
   width: 220px;
   background: #ffffff;
@@ -104,6 +152,7 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  z-index: 40;
 }
 
 .brand {
@@ -131,6 +180,7 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   line-height: 1.2;
+  min-width: 0;
 }
 
 .brand-name {
@@ -144,7 +194,20 @@ const handleLogout = () => {
   color: #9ca3af;
 }
 
-/* 导航 */
+.sidebar-close {
+  display: none;
+  margin-left: auto;
+  border: none;
+  background: #f3f4f6;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 22px;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+}
+
 .nav {
   flex: 1;
   padding: 8px 12px;
@@ -202,7 +265,6 @@ const handleLogout = () => {
   opacity: 0.8;
 }
 
-/* 用户卡 */
 .user-card {
   display: flex;
   align-items: center;
@@ -237,11 +299,17 @@ const handleLogout = () => {
   font-size: 13px;
   font-weight: 600;
   color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .user-handle {
   font-size: 11px;
   color: #9ca3af;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .logout-btn {
@@ -261,10 +329,130 @@ const handleLogout = () => {
   color: #ef4444;
 }
 
-/* 主内容区 */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-bar {
+  display: none;
+}
+
 .main {
   flex: 1;
   padding: 32px 40px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+@media (max-width: 900px) {
+  .sidebar-mask {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.45);
+    z-index: 35;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .sidebar-mask.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 86vw);
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    box-shadow: 8px 0 24px rgba(15, 23, 42, 0.08);
+    border-right: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: 56px;
+    padding: 0 14px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .menu-btn {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .menu-btn span {
+    display: block;
+    width: 16px;
+    height: 2px;
+    background: #374151;
+    border-radius: 1px;
+  }
+
+  .mobile-title {
+    flex: 1;
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #0f766e;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .main {
+    padding: 16px 14px 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main {
+    padding: 12px 10px 24px;
+  }
 }
 </style>
