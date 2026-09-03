@@ -17,7 +17,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/app/users', name: 'users', label: '用户管理', subtitle: '账号' },
   { path: '/app/projects', name: 'projects', label: '项目管理', subtitle: '入口' },
-  { path: '/app/ai-qa', name: 'ai-qa', label: 'AI 问答', subtitle: '按项目' },
+  // AI 问答：二期开放，一期先从侧栏隐藏
+  // { path: '/app/ai-qa', name: 'ai-qa', label: 'AI 问答', subtitle: '按项目' },
   { path: '/app/personal', name: 'personal', label: '个人中心', subtitle: '资料' },
 ]
 

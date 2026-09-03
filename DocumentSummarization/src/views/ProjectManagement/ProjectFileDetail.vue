@@ -37,15 +37,31 @@ const pageStatus = computed(() => {
 
 const fileName = computed(() => file.value?.path.split('/').pop() || fileId.value)
 
+function resolveInitialDocId(docs: ChangeDoc[]): string | null {
+  if (!docs.length) return null
+  const sorted = [...docs].sort((a, b) => (a.at < b.at ? 1 : -1))
+  const fromQuery = typeof route.query.doc === 'string' ? route.query.doc : ''
+  if (fromQuery && sorted.some((d) => d.id === fromQuery)) return fromQuery
+  return sorted[0]?.id || null
+}
+
 watch(
   file,
   (f) => {
-    selectedDocId.value = f?.docs.length
-      ? [...f.docs].sort((a, b) => (a.at < b.at ? 1 : -1))[0]?.id || null
-      : null
+    selectedDocId.value = f ? resolveInitialDocId(f.docs) : null
     commentInput.value = ''
   },
   { immediate: true },
+)
+
+watch(
+  () => route.query.doc,
+  (doc) => {
+    if (typeof doc !== 'string' || !file.value) return
+    if (file.value.docs.some((d) => d.id === doc)) {
+      selectedDocId.value = doc
+    }
+  },
 )
 
 function backToMap() {
@@ -356,7 +372,7 @@ function submitComment() {
 }
 .history-wrap {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: minmax(260px, 34%) 1fr;
   min-height: 360px;
 }
 .history-list {
@@ -365,9 +381,9 @@ function submitComment() {
 }
 .tl-item {
   display: grid;
-  grid-template-columns: 148px 1fr;
-  gap: 14px;
-  padding: 16px;
+  grid-template-columns: 112px 1fr;
+  gap: 12px;
+  padding: 14px;
   border: none;
   border-bottom: 1px solid #e5e7eb;
   background: #fff;

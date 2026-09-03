@@ -7,6 +7,7 @@ const PROFILE_KEY = 'ds_profile'
 export interface UserProfile {
   username: string
   displayName: string
+  email?: string
 }
 
 function readProfile(): UserProfile | null {
@@ -43,6 +44,7 @@ export const useUserStore = defineStore('user', () => {
     profile.value = {
       username: payload.username,
       displayName: payload.displayName,
+      email: payload.email,
     }
     writeProfile(profile.value)
   }
