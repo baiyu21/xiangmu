@@ -13,6 +13,7 @@ export interface UpdateUserPayload {
   email?: string
   role?: string
   username?: string
+  password?: string
 }
 
 export interface UserListItem {
@@ -69,7 +70,6 @@ export const ROLE_LABEL: Record<string, string> = {
   admin: '管理员',
   customer: '客户',
   member: '项目成员',
-  readonly: '只读成员',
 }
 
 export function roleLabel(role: string): string {

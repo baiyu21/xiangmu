@@ -17,9 +17,12 @@ export interface SendCodePayload {
   email: string
 }
 
-/** 更新显示名 */
-export interface UpdateProfileNamePayload {
-  name: string
+/** 更新个人资料（字段均可选，按需提交） */
+export interface UpdateProfileInfoPayload {
+  username?: string
+  name?: string
+  email?: string
+  role?: string
 }
 
 /** 修改密码（邮箱验证码） */
@@ -29,7 +32,7 @@ export interface UpdatePasswordPayload {
   code: string
 }
 
-export type UpdateProfilePayload = UpdateProfileNamePayload | UpdatePasswordPayload
+export type UpdateProfilePayload = UpdateProfileInfoPayload | UpdatePasswordPayload
 
 /** 后端可能返回的用户字段（兼容多种命名） */
 export interface AuthUser {
@@ -130,6 +133,11 @@ export function register(payload: RegisterPayload) {
 
 export function sendRegisterCode(payload: SendCodePayload) {
   return request.post('/v1/auth/send-code', payload)
+}
+
+/** 修改密码发验证码（需登录；服务端按当前用户邮箱发送） */
+export function sendPasswordChangeCode() {
+  return request.post('/v1/auth/send-password-change-code')
 }
 
 export function getUserProfile() {

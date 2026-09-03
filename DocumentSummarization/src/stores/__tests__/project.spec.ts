@@ -17,30 +17,57 @@ describe('useProjectStore', () => {
     setActivePinia(createPinia())
   })
 
-  it('场景：初始包含原型两项目', () => {
+  it('场景：初始为空列表', () => {
     const store = useProjectStore()
-    expect(store.projects.map((p) => p.id)).toEqual(['rd-xmz', 'school-portal'])
+    expect(store.projects).toEqual([])
   })
 
-  it('场景：addProject 写入列表头部', () => {
+  it('场景：setProjects 写入列表', () => {
     const store = useProjectStore()
-    const created = store.addProject({
-      url: 'https://github.com/demo/new-repo.git',
+    store.setProjects([
+      {
+        id: '1',
+        name: 'xiangmu',
+        url: 'https://github.com/baiyu21/xiangmu.git',
+        branch: 'main',
+        mappedFiles: 0,
+        changeCount: 0,
+      },
+    ])
+    expect(store.projects).toHaveLength(1)
+    expect(store.getById('1')?.name).toBe('xiangmu')
+  })
+
+  it('场景：upsertProject 写入列表头部并可去重', () => {
+    const store = useProjectStore()
+    store.setProjects([
+      {
+        id: '1',
+        name: 'old',
+        url: 'https://github.com/a/old.git',
+        branch: 'main',
+        mappedFiles: 0,
+        changeCount: 0,
+      },
+    ])
+    store.upsertProject({
+      id: '2',
+      name: 'new',
+      url: 'https://github.com/a/new.git',
       branch: 'main',
+      mappedFiles: 0,
+      changeCount: 0,
     })
-    expect(created.id).toBe('new-repo')
-    expect(store.projects[0]?.id).toBe('new-repo')
-    expect(created.mappedFiles).toBe(0)
-  })
-
-  it('场景：getById 可查到项目', () => {
-    const store = useProjectStore()
-    expect(store.getById('rd-xmz')?.branch).toBe('main')
-    expect(store.getById('missing')).toBeUndefined()
-  })
-
-  it('场景：空 URL 抛错', () => {
-    const store = useProjectStore()
-    expect(() => store.addProject({ url: '  ' })).toThrow('请输入仓库地址')
+    expect(store.projects[0]?.id).toBe('2')
+    store.upsertProject({
+      id: '2',
+      name: 'new-2',
+      url: 'https://github.com/a/new.git',
+      branch: 'develop',
+      mappedFiles: 1,
+      changeCount: 2,
+    })
+    expect(store.projects).toHaveLength(2)
+    expect(store.getById('2')?.name).toBe('new-2')
   })
 })

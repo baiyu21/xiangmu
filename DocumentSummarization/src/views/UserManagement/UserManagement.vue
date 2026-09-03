@@ -43,10 +43,8 @@ const ROLE_TAG_TYPE: Record<string, 'primary' | 'success' | 'warning' | 'info'> 
   管理员: 'warning',
   customer: 'success',
   客户: 'success',
-  member: 'success',
-  项目成员: 'success',
-  readonly: 'info',
-  只读成员: 'info',
+  member: 'primary',
+  项目成员: 'primary',
 }
 
 async function reload() {
@@ -81,7 +79,22 @@ async function onSubmit(payload: UserFormData) {
   submitting.value = true
   try {
     if (payload.id != null) {
-      await updateUser(payload.id, { name: payload.name.trim() })
+      const body: {
+        username: string
+        name: string
+        email: string
+        role: string
+        password?: string
+      } = {
+        username: payload.username.trim(),
+        name: payload.name.trim(),
+        email: payload.email.trim(),
+        role: payload.role,
+      }
+      if (payload.password?.trim()) {
+        body.password = payload.password.trim()
+      }
+      await updateUser(payload.id, body)
       ElMessage.success('用户已更新')
     } else {
       await createUser({

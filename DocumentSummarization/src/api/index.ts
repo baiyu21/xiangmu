@@ -4,6 +4,7 @@ export {
   login,
   register,
   sendRegisterCode,
+  sendPasswordChangeCode,
   getUserProfile,
   updateUserProfile,
   getGithubToken,
@@ -15,7 +16,7 @@ export {
   type RegisterPayload,
   type SendCodePayload,
   type UpdateProfilePayload,
-  type UpdateProfileNamePayload,
+  type UpdateProfileInfoPayload,
   type UpdatePasswordPayload,
   type UpdateGithubTokenPayload,
   type AuthSession,
@@ -34,3 +35,13 @@ export {
   type UpdateUserPayload,
   type UserListItem,
 } from './modules/users'
+export {
+  fetchProjects,
+  createProject,
+  syncProject,
+  normalizeProjectList,
+  normalizeProjectItem,
+  type CreateProjectPayload,
+  type SyncProjectPayload,
+  type ProjectListItem,
+} from './modules/projects'
