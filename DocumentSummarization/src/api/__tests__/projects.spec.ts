@@ -84,6 +84,31 @@ describe('normalizeProjectDetail', () => {
 })
 
 describe('normalizeMappedFile', () => {
+  it('场景：解析项目文件列表项（file/module/changeCount）', () => {
+    const file = normalizeMappedFile(
+      {
+        file: 'src/views/ProjectManagement/ProjectOverview.vue',
+        module: '项目模块',
+        changeCount: 3,
+        authorCount: 1,
+        documentCount: 1,
+        lastDate: '2026-09-02',
+      },
+      '8',
+    )
+    expect(file).toMatchObject({
+      id: 'src/views/ProjectManagement/ProjectOverview.vue',
+      projectId: '8',
+      path: 'src/views/ProjectManagement/ProjectOverview.vue',
+      module: '项目模块',
+      changeCount: 3,
+      authorCount: 1,
+      documentCount: 1,
+      lastAt: '2026-09-02',
+      docs: [],
+    })
+  })
+
   it('场景：无 docs 时也能解析路径', () => {
     const file = normalizeMappedFile(
       { id: 'f1', file_path: 'README.md', module_name: '文档' },
@@ -96,5 +121,43 @@ describe('normalizeMappedFile', () => {
       module: '文档',
       docs: [],
     })
+  })
+})
+
+describe('normalizeChangeDocDetail', () => {
+  it('场景：解析 change-docs 详情', async () => {
+    const { normalizeChangeDocDetail } = await import('../modules/projects')
+    const detail = normalizeChangeDocDetail({
+      id: 16,
+      date: '2026-09-02',
+      author: 'baiyu21',
+      requirementDesc: '缩小宽度',
+      relatedReq: '可用性调整',
+      reason: '反馈过宽',
+      impact: '仅样式',
+      notice: '无接口变更',
+      sourceFile: '2026-09-02-baiyu21.md',
+      rawContent: '# 前端变更记录',
+      changeCount: 2,
+      items: [
+        {
+          id: 84,
+          module: '源码',
+          file: 'src/views/RegisterView.vue',
+          type: '删除',
+          typeCode: 'delete',
+          note: '死代码',
+        },
+      ],
+    })
+    expect(detail).toMatchObject({
+      id: '16',
+      date: '2026-09-02',
+      author: 'baiyu21',
+      requirementDesc: '缩小宽度',
+      changeCount: 2,
+    })
+    expect(detail?.items).toHaveLength(1)
+    expect(detail?.items[0]?.file).toBe('src/views/RegisterView.vue')
   })
 })

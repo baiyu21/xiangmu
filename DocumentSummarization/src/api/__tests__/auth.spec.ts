@@ -44,8 +44,11 @@ describe('normalizeUserProfile', () => {
 
 describe('normalizeGithubToken', () => {
   it('场景：解析 github_token', async () => {
-    const { normalizeGithubToken } = await import('../modules/auth')
+    const { normalizeGithubToken, isMaskedGithubToken } = await import('../modules/auth')
     expect(normalizeGithubToken({ github_token: 'ghp_xxx' })).toBe('ghp_xxx')
     expect(normalizeGithubToken({ data: { github_token: 'pat_1' } })).toBe('pat_1')
+    expect(normalizeGithubToken('github_pat_abc')).toBe('github_pat_abc')
+    expect(isMaskedGithubToken('ghp_****abcd')).toBe(true)
+    expect(isMaskedGithubToken('github_pat_11ABC')).toBe(false)
   })
 })

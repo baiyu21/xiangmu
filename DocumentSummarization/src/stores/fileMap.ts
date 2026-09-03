@@ -31,6 +31,30 @@ export const useFileMapStore = defineStore('fileMap', () => {
     files.value = [...others, ...next.map((f) => ({ ...f, projectId }))]
   }
 
+  /** 合并/更新单个文件（保留已有注释等本地字段时可按需扩展） */
+  function upsertFile(file: MappedFile) {
+    const idx = files.value.findIndex(
+      (f) => f.projectId === file.projectId && (f.id === file.id || f.path === file.path),
+    )
+    if (idx >= 0) {
+      const prev = files.value[idx]!
+      const merged: MappedFile = {
+        ...prev,
+        ...file,
+        projectId: file.projectId,
+        id: prev.id || file.id,
+        path: file.path || prev.path,
+        docs: file.docs.length ? file.docs : prev.docs,
+      }
+      const copy = files.value.slice()
+      copy[idx] = merged
+      files.value = copy
+      return merged
+    }
+    files.value = [...files.value, file]
+    return file
+  }
+
   function addComment(
     projectId: string,
     fileId: string,
@@ -66,6 +90,7 @@ export const useFileMapStore = defineStore('fileMap', () => {
     getFile,
     projectStats,
     setProjectFiles,
+    upsertFile,
     addComment,
     changeCountOf,
   }

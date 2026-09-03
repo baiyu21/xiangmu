@@ -3,8 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { PageState } from '@/components'
+import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
+import { fetchProjectFileDetail, normalizeFileDetail } from '@/api'
 import { changeCountOf, type ChangeDoc } from '@/utils/fileMap'
 
 const route = useRoute()
@@ -13,12 +15,21 @@ const projectStore = useProjectStore()
 const fileMapStore = useFileMapStore()
 
 const projectId = computed(() => String(route.params.id || ''))
-const fileId = computed(() => String(route.params.fileId || ''))
+const fileId = computed(() => {
+  const raw = String(route.params.fileId || '')
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+})
 const project = computed(() => projectStore.getById(projectId.value))
 const file = computed(() => fileMapStore.getFile(projectId.value, fileId.value))
 
 const selectedDocId = ref<string | null>(null)
 const commentInput = ref('')
+const detailLoading = ref(false)
+const pageStatus = ref<PageLoadStatus>('loading')
 
 const history = computed(() => {
   if (!file.value) return [] as ChangeDoc[]
@@ -28,12 +39,6 @@ const history = computed(() => {
 const selectedDoc = computed(() =>
   history.value.find((d) => d.id === selectedDocId.value) || null,
 )
-
-const pageStatus = computed(() => {
-  if (!project.value) return 'error' as const
-  if (!file.value) return 'error' as const
-  return 'ready' as const
-})
 
 const fileName = computed(() => file.value?.path.split('/').pop() || fileId.value)
 
@@ -45,14 +50,43 @@ function resolveInitialDocId(docs: ChangeDoc[]): string | null {
   return sorted[0]?.id || null
 }
 
-watch(
-  file,
-  (f) => {
-    selectedDocId.value = f ? resolveInitialDocId(f.docs) : null
-    commentInput.value = ''
-  },
-  { immediate: true },
-)
+async function loadFileDetail() {
+  const pid = projectId.value
+  const fid = fileId.value
+  if (!pid || !fid) {
+    pageStatus.value = 'error'
+    return
+  }
+
+  detailLoading.value = true
+  pageStatus.value = 'loading'
+  try {
+    const path = file.value?.path || fid
+    const raw = await fetchProjectFileDetail(pid, { file: path })
+    const detail = normalizeFileDetail(raw, pid)
+    if (detail) {
+      fileMapStore.upsertFile(detail)
+      if (!projectStore.getById(pid)) {
+        projectStore.upsertProject({
+          id: pid,
+          name: pid,
+          url: '',
+          branch: 'main',
+          mappedFiles: 1,
+          changeCount: changeCountOf(detail),
+        })
+      }
+      pageStatus.value = 'ready'
+      selectedDocId.value = resolveInitialDocId(detail.docs)
+    } else {
+      pageStatus.value = file.value ? 'ready' : 'error'
+    }
+  } catch {
+    pageStatus.value = project.value && file.value ? 'ready' : 'error'
+  } finally {
+    detailLoading.value = false
+  }
+}
 
 watch(
   () => route.query.doc,
@@ -64,6 +98,14 @@ watch(
   },
 )
 
+watch(
+  [projectId, fileId],
+  () => {
+    void loadFileDetail()
+  },
+  { immediate: true },
+)
+
 function backToMap() {
   void router.push({ name: 'project-overview', params: { id: projectId.value } })
 }
@@ -73,13 +115,16 @@ function backToList() {
 }
 
 function openRecord(docId: string) {
+  const doc = file.value?.docs.find((d) => d.id === docId)
+  const date = (doc?.at || '').slice(0, 10)
   void router.push({
     name: 'project-record',
     params: {
       id: projectId.value,
-      fileId: fileId.value,
-      docId,
+      fileId: encodeURIComponent(fileId.value),
+      docId: doc?.docId || docId,
     },
+    query: date ? { date } : undefined,
   })
 }
 
@@ -116,7 +161,7 @@ function submitComment() {
     <PageState
       :status="pageStatus"
       error-text="未找到该文件或项目"
-      @retry="backToMap"
+      @retry="loadFileDetail"
     >
       <header class="page-header">
         <div>
@@ -128,8 +173,14 @@ function submitComment() {
 
       <div class="stats">
         <div class="stat"><i>修改次数</i><b>{{ file ? changeCountOf(file) : 0 }}</b></div>
-        <div class="stat"><i>修改人数</i><b>{{ file?.authors.length || 0 }}</b></div>
-        <div class="stat"><i>关联文档</i><b>{{ file?.docs.length || 0 }}</b></div>
+        <div class="stat">
+          <i>修改人数</i>
+          <b>{{ file?.authors.length || file?.authorCount || 0 }}</b>
+        </div>
+        <div class="stat">
+          <i>关联文档</i>
+          <b>{{ file?.documentCount || file?.docs.length || 0 }}</b>
+        </div>
         <div class="stat">
           <i>所属模块</i><b class="mod">{{ file?.module }}</b>
         </div>

@@ -154,15 +154,33 @@ export interface UpdateGithubTokenPayload {
 
 /** 从 GET/PUT token 响应解析 GitHub Token 明文或掩码 */
 export function normalizeGithubToken(raw: unknown): string {
+  if (typeof raw === 'string' && raw.trim()) return raw.trim()
+
   const root = asRecord(raw) || {}
   const data = asRecord(root.data) || root
+  const user = asRecord(data.user) || asRecord(root.user)
+
   return pickString(
     data.github_token,
     data.githubToken,
+    data.access_token,
+    data.accessToken,
     data.token,
+    user?.github_token,
+    user?.githubToken,
     root.github_token,
     root.githubToken,
+    root.token,
   )
+}
+
+/** 是否为掩码展示（不可用于同步请求） */
+export function isMaskedGithubToken(token: string): boolean {
+  const t = token.trim()
+  if (!t) return true
+  // 典型掩码：含 * 或 •，且不是正常 pat 明文
+  if (/[*•●]+/.test(t)) return true
+  return false
 }
 
 export function getGithubToken() {
