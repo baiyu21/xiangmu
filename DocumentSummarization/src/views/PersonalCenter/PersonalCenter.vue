@@ -402,8 +402,8 @@ onUnmounted(() => {
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="角色" prop="role">
-                <el-select v-model="profile.role" placeholder="请选择角色" style="width: 100%">
+              <el-form-item label="角色" prop="role" >
+                <el-select v-model="profile.role" placeholder="请选择角色" style="width: 100%" disabled>
                   <el-option
                     v-for="opt in ROLE_OPTIONS"
                     :key="opt.value"
