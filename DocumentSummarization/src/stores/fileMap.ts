@@ -78,7 +78,22 @@ export const useFileMapStore = defineStore('fileMap', () => {
     }
     if (!doc.clientComments) doc.clientComments = []
     doc.clientComments.push(comment)
+    files.value = [...files.value]
     return comment
+  }
+
+  /** 用接口结果覆盖某次修改记录下的注释列表 */
+  function setDocComments(
+    projectId: string,
+    fileId: string,
+    docId: string,
+    comments: ClientComment[],
+  ) {
+    const file = getFile(projectId, fileId)
+    const doc = file?.docs.find((d) => d.id === docId || d.docId === docId)
+    if (!doc) return
+    doc.clientComments = comments
+    files.value = [...files.value]
   }
 
   const totalFiles = computed(() => files.value.length)
@@ -92,6 +107,7 @@ export const useFileMapStore = defineStore('fileMap', () => {
     setProjectFiles,
     upsertFile,
     addComment,
+    setDocComments,
     changeCountOf,
   }
 })

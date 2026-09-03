@@ -13,6 +13,7 @@ export {
   normalizeUserProfile,
   normalizeGithubToken,
   isMaskedGithubToken,
+  hasGithubTokenConfigured,
   type LoginPayload,
   type RegisterPayload,
   type SendCodePayload,
@@ -61,3 +62,10 @@ export {
   type ProjectDetail,
   type ProjectStats,
 } from './modules/projects'
+export {
+  fetchRecordComments,
+  createRecordComment,
+  normalizeRecordComments,
+  normalizeRecordComment,
+  type CreateCommentPayload,
+} from './modules/comments'

@@ -15,6 +15,7 @@ import {
   getGithubToken,
   normalizeGithubToken,
   isMaskedGithubToken,
+  hasGithubTokenConfigured,
 } from '@/api'
 
 const router = useRouter()
@@ -91,16 +92,20 @@ function goOverview(id: string) {
 }
 
 /**
- * 同步前必须先拉个人中心已保存的 Token：
- * 1) GET /v1/auth/user/token
- * 2) 再用明文调用 POST /v1/projects/{id}/sync
+ * 同步前先从后端取已保存的 Token，再放入 sync body：
+ * 1) GET /v1/auth/user/token → data.token_preview / has_token
+ * 2) POST /v1/projects/{id}/sync { github_token }
  */
 async function resolveGithubToken(): Promise<string | null> {
   try {
     const raw = await getGithubToken()
+    if (!hasGithubTokenConfigured(raw)) {
+      ElMessage.warning('请先在个人中心配置 GitHub Token')
+      return null
+    }
     const token = normalizeGithubToken(raw)
     if (!token) {
-      ElMessage.warning('请先在个人中心配置 GitHub Token')
+      ElMessage.warning('已配置 Token 但未返回可用值，请重新保存后再同步')
       return null
     }
     if (isMaskedGithubToken(token)) {
