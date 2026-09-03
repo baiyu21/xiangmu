@@ -6,6 +6,7 @@ import { PageState, ProjectFormModal } from '@/components'
 import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore, type Project } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
+import { fetchProjects, createProject, syncProject, normalizeProjectList, normalizeProjectItem, getGithubToken, normalizeGithubToken } from '@/api'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -13,10 +14,14 @@ const fileMapStore = useFileMapStore()
 
 const status = ref<PageLoadStatus>('loading')
 const modalOpen = ref(false)
+const creating = ref(false)
+const syncingId = ref<string | null>(null)
+const syncingAll = ref(false)
 
 const ACCENT_COLORS = ['#0f766e', '#7c3aed', '#ea580c', '#0891b2', '#be185d', '#4f46e5']
 
 const rows = computed(() => projectStore.projects)
+const isBusy = computed(() => creating.value || syncingId.value != null || syncingAll.value)
 
 function accentOf(project: Project, index: number) {
   let hash = 0
@@ -35,21 +40,40 @@ function liveStats(projectId: string) {
 
 async function loadList() {
   status.value = 'loading'
-  await new Promise((r) => setTimeout(r, 280))
-  status.value = rows.value.length ? 'ready' : 'empty'
+  try {
+    const raw = await fetchProjects()
+    projectStore.setProjects(normalizeProjectList(raw))
+    status.value = projectStore.projects.length ? 'ready' : 'empty'
+  } catch {
+    status.value = 'error'
+  }
 }
 
 function openCreate() {
   modalOpen.value = true
 }
 
-function onCreate(payload: { url: string; branch: string }) {
+async function onCreate(payload: { url: string; branch: string }) {
+  if (creating.value) return
+  creating.value = true
   try {
-    const created = projectStore.addProject(payload)
+    const raw = await createProject({
+      repoUrl: payload.url.trim(),
+      defaultBranch: (payload.branch || 'main').trim() || 'main',
+    })
+    const created = normalizeProjectItem(raw) || normalizeProjectList(raw)[0] || null
+    if (created) {
+      projectStore.upsertProject(created)
+    } else {
+      await loadList()
+    }
     status.value = 'ready'
-    ElMessage.success(`项目已添加：${created.name}`)
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '添加失败')
+    modalOpen.value = false
+    ElMessage.success(`项目已添加：${created?.name || payload.url}`)
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    creating.value = false
   }
 }
 
@@ -57,12 +81,69 @@ function goOverview(id: string) {
   void router.push({ name: 'project-overview', params: { id } })
 }
 
-function syncOne(name: string) {
-  ElMessage.success(`已同步（模拟）：${name}`)
+async function resolveGithubToken(): Promise<string | null> {
+  try {
+    const raw = await getGithubToken()
+    const token = normalizeGithubToken(raw)
+    if (!token) {
+      ElMessage.warning('请先在个人中心配置 GitHub Token')
+      return null
+    }
+    // 若后端返回掩码（含 *），无法用于同步
+    if (token.includes('*')) {
+      ElMessage.warning('当前 Token 为掩码，请在个人中心重新保存完整 GitHub Token 后再同步')
+      return null
+    }
+    return token
+  } catch {
+    return null
+  }
 }
 
-function syncAll() {
-  ElMessage.success('全部项目同步完成（模拟）')
+async function syncOne(project: Project) {
+  if (isBusy.value) return
+  syncingId.value = project.id
+  try {
+    const token = await resolveGithubToken()
+    if (!token) return
+    await syncProject(project.id, { github_token: token })
+    ElMessage.success(`已同步：${project.name}`)
+    await loadList()
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    syncingId.value = null
+  }
+}
+
+async function syncAll() {
+  if (isBusy.value || rows.value.length === 0) return
+  syncingAll.value = true
+  try {
+    const token = await resolveGithubToken()
+    if (!token) return
+
+    let ok = 0
+    let fail = 0
+    for (const project of rows.value) {
+      syncingId.value = project.id
+      try {
+        await syncProject(project.id, { github_token: token })
+        ok += 1
+      } catch {
+        fail += 1
+      }
+    }
+    if (fail === 0) {
+      ElMessage.success(`全部项目同步完成（${ok}）`)
+    } else {
+      ElMessage.warning(`同步结束：成功 ${ok}，失败 ${fail}`)
+    }
+    await loadList()
+  } finally {
+    syncingId.value = null
+    syncingAll.value = false
+  }
 }
 
 onMounted(() => {
@@ -78,8 +159,12 @@ onMounted(() => {
         <p>登记与同步仓库，点击「进入概览」查看文件列表与修改历史简略版。</p>
       </div>
       <div class="header-actions">
-        <button type="button" class="btn-ghost" @click="syncAll">全部同步</button>
-        <button type="button" class="btn-primary" @click="openCreate">添加项目</button>
+        <button type="button" class="btn-ghost" :disabled="isBusy" @click="syncAll">
+          {{ syncingAll ? '同步中…' : '全部同步' }}
+        </button>
+        <button type="button" class="btn-primary" :disabled="isBusy" @click="openCreate">
+          添加项目
+        </button>
       </div>
     </header>
 
@@ -114,13 +199,20 @@ onMounted(() => {
             <button type="button" class="link primary" @click="goOverview(p.id)">
               进入概览 →
             </button>
-            <button type="button" class="link muted" @click="syncOne(p.name)">同步</button>
+            <button
+              type="button"
+              class="link muted"
+              :disabled="isBusy"
+              @click="syncOne(p)"
+            >
+              {{ syncingId === p.id ? '同步中…' : '同步' }}
+            </button>
           </div>
         </article>
       </div>
     </PageState>
 
-    <ProjectFormModal v-model:open="modalOpen" @submit="onCreate" />
+    <ProjectFormModal v-model:open="modalOpen" :submitting="creating" @submit="onCreate" />
   </div>
 </template>
 
@@ -291,6 +383,17 @@ onMounted(() => {
 
 .link.muted:hover {
   color: #6b7280;
+}
+
+.link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary:disabled,
+.btn-ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btn-primary {

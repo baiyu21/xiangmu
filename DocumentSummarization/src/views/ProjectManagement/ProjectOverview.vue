@@ -2,8 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PageState } from '@/components'
+import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
+import { fetchProject, normalizeProjectDetail } from '@/api'
 import {
   changeCountOf,
   filterFiles,
@@ -21,12 +23,27 @@ const fileMapStore = useFileMapStore()
 const projectId = computed(() => String(route.params.id || ''))
 const project = computed(() => projectStore.getById(projectId.value))
 
+const status = ref<PageLoadStatus>('loading')
 const query = ref('')
 const sort = ref<SortKey>('count')
 const selectedFileId = ref<string | null>(null)
+/** 详情接口返回的统计（优先于本地回算） */
+const apiStats = ref<{ files: number; changes: number; authors: number; docs: number } | null>(
+  null,
+)
 
 const projectFiles = computed(() => fileMapStore.filesOf(projectId.value))
-const stats = computed(() => fileMapStore.projectStats(projectId.value))
+const computedStats = computed(() => fileMapStore.projectStats(projectId.value))
+const stats = computed(() => {
+  if (!apiStats.value) return computedStats.value
+  // 有文件列表时，作者数用回算更准；其余优先接口
+  return {
+    files: apiStats.value.files || computedStats.value.files,
+    changes: apiStats.value.changes || computedStats.value.changes,
+    authors: computedStats.value.authors || apiStats.value.authors,
+    docs: apiStats.value.docs || computedStats.value.docs,
+  }
+})
 
 const tableRows = computed(() =>
   sortFiles(filterFiles(projectFiles.value, query.value, 'all', 'module'), sort.value),
@@ -42,7 +59,60 @@ const briefHistory = computed(() => {
   return [...selectedFile.value.docs].sort((a, b) => (a.at < b.at ? 1 : -1))
 })
 
-const pageStatus = computed(() => (project.value ? 'ready' : 'error'))
+const pageStatus = computed(() => {
+  if (status.value === 'loading' || status.value === 'error') return status.value
+  return project.value ? 'ready' : 'error'
+})
+
+async function loadDetail() {
+  const id = projectId.value
+  if (!id) {
+    status.value = 'error'
+    return
+  }
+
+  status.value = 'loading'
+  apiStats.value = null
+  try {
+    const raw = await fetchProject(id)
+    const detail = normalizeProjectDetail(raw, id)
+    if (!detail) {
+      status.value = 'error'
+      return
+    }
+    projectStore.upsertProject(detail)
+    fileMapStore.setProjectFiles(id, detail.files)
+    apiStats.value = detail.stats || {
+      files: detail.mappedFiles,
+      changes: detail.changeCount,
+      authors: 0,
+      docs: detail.mappedFiles,
+    }
+    status.value = 'ready'
+  } catch {
+    // 详情失败时：若列表页已有项目缓存，仍可展示壳 + 空文件
+    if (projectStore.getById(id)) {
+      fileMapStore.setProjectFiles(id, [])
+      apiStats.value = {
+        files: projectStore.getById(id)?.mappedFiles || 0,
+        changes: projectStore.getById(id)?.changeCount || 0,
+        authors: 0,
+        docs: projectStore.getById(id)?.stats?.docs || 0,
+      }
+      status.value = 'ready'
+    } else {
+      status.value = 'error'
+    }
+  }
+}
+
+watch(
+  projectId,
+  () => {
+    void loadDetail()
+  },
+  { immediate: true },
+)
 
 watch(
   tableRows,
@@ -96,7 +166,7 @@ function openDocDetail(docId: string) {
     <PageState
       :status="pageStatus"
       error-text="未找到该项目，可能已被删除或链接无效"
-      @retry="backToList"
+      @retry="loadDetail"
     >
       <header class="page-header">
         <div>

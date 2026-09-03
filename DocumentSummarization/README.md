@@ -21,6 +21,16 @@ npm run dev
 
 浏览器打开控制台提示的本地地址（默认 `http://localhost:5173`）。
 
+## 路由与刷新（避免 404）
+
+当前使用 **Hash 路由**（`createWebHashHistory`），地址形如 `/#/app/projects`。  
+刷新或分享链接时始终加载 `index.html`，**不依赖** Nginx/Apache 额外配置。
+
+若改回 History 模式（无 `#`），部署时必须配置 SPA 回退：
+
+- Nginx：参考 `deploy/nginx-spa.conf`（`try_files ... /index.html`）
+- Apache：构建产物已含 `public/.htaccess`
+
 ## 常用脚本
 
 | 命令 | 说明 |

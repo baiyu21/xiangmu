@@ -3,6 +3,10 @@ import { reactive, watch } from 'vue'
 
 const open = defineModel<boolean>('open', { default: false })
 
+const props = defineProps<{
+  submitting?: boolean
+}>()
+
 const emit = defineEmits<{
   submit: [payload: { url: string; branch: string }]
 }>()
@@ -19,14 +23,15 @@ watch(open, (value) => {
 })
 
 function close() {
+  if (props.submitting) return
   open.value = false
 }
 
 function submit() {
+  if (props.submitting) return
   errors.url = form.url.trim() ? '' : '请输入仓库地址'
   if (errors.url) return
   emit('submit', { url: form.url.trim(), branch: form.branch.trim() || 'main' })
-  open.value = false
 }
 </script>
 
@@ -42,16 +47,27 @@ function submit() {
             type="url"
             class="input"
             placeholder="https://github.com/org/repo.git"
+            :disabled="submitting"
           />
           <span v-if="errors.url" class="err">{{ errors.url }}</span>
         </label>
         <label class="field">
           <span>默认分支</span>
-          <input v-model="form.branch" type="text" class="input" placeholder="main" />
+          <input
+            v-model="form.branch"
+            type="text"
+            class="input"
+            placeholder="main"
+            :disabled="submitting"
+          />
         </label>
         <div class="actions">
-          <button type="button" class="btn-ghost" @click="close">取消</button>
-          <button type="button" class="btn-primary" @click="submit">保存</button>
+          <button type="button" class="btn-ghost" :disabled="submitting" @click="close">
+            取消
+          </button>
+          <button type="button" class="btn-primary" :disabled="submitting" @click="submit">
+            {{ submitting ? '保存中…' : '保存' }}
+          </button>
         </div>
       </div>
     </div>

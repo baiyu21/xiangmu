@@ -1,9 +1,14 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import MainLayout from '../layouts/MainLayout.vue'
 import { useUserStore } from '@/stores/user'
 
+/**
+ * 使用 Hash 路由：刷新 / 直链不会 404（不依赖 Nginx try_files）。
+ * 地址形如：http://host/#/app/projects
+ * 若已配置 SPA 回退且希望去掉 #，可改回 createWebHistory。
+ */
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',

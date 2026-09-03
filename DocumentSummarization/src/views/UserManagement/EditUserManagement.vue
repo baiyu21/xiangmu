@@ -22,13 +22,21 @@ const emit = defineEmits<{
   submit: [data: UserFormData]
 }>()
 
-/** 与后端 role 字段对齐 */
+/** 角色：客户 / 项目成员 / 管理员 */
 const ROLE_OPTIONS = [
-  { label: '管理员', value: 'admin' },
   { label: '客户', value: 'customer' },
   { label: '项目成员', value: 'member' },
-  { label: '只读成员', value: 'readonly' },
+  { label: '管理员', value: 'admin' },
 ]
+
+const ROLE_ALIASES: Record<string, string> = {
+  customer: 'customer',
+  客户: 'customer',
+  member: 'member',
+  项目成员: 'member',
+  admin: 'admin',
+  管理员: 'admin',
+}
 
 const isEditMode = computed(() => props.formData?.id != null)
 
@@ -42,26 +50,40 @@ const form = reactive<UserFormData>({
 })
 
 const rules = computed<FormRules<UserFormData>>(() => ({
-  username: isEditMode.value
-    ? []
-    : [{ required: true, message: '请输入登录用户名', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入登录用户名', trigger: 'blur' }],
   name: [{ required: true, message: '请输入显示名', trigger: 'blur' }],
-  email: isEditMode.value
-    ? []
-    : [
-        { required: true, message: '请输入邮箱', trigger: 'blur' },
-        { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
-      ],
-  role: isEditMode.value
-    ? []
-    : [{ required: true, message: '请选择角色', trigger: 'change' }],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+  ],
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
   password: isEditMode.value
-    ? []
+    ? [
+        {
+          validator: (_rule, value, callback) => {
+            if (!value) {
+              callback()
+              return
+            }
+            if (String(value).length < 6) {
+              callback(new Error('密码至少 6 位'))
+              return
+            }
+            callback()
+          },
+          trigger: 'blur',
+        },
+      ]
     : [
         { required: true, message: '请输入密码', trigger: 'blur' },
         { min: 6, message: '密码至少 6 位', trigger: 'blur' },
       ],
 }))
+
+function normalizeRole(role?: string) {
+  if (!role) return 'customer'
+  return ROLE_ALIASES[role] || (ROLE_OPTIONS.some((r) => r.value === role) ? role : 'customer')
+}
 
 watch(
   () => props.open,
@@ -72,7 +94,7 @@ watch(
     form.username = d?.username ?? ''
     form.name = d?.name ?? ''
     form.email = d?.email ?? ''
-    form.role = d?.role ?? 'customer'
+    form.role = normalizeRole(d?.role)
     form.password = ''
     formRef.value?.clearValidate()
   },
@@ -100,19 +122,16 @@ async function handleAction() {
     @update:model-value="(v: boolean) => emit('update:open', v)"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-      <el-form-item v-if="!isEditMode" label="登录用户名" prop="username">
+      <el-form-item label="登录用户名" prop="username">
         <el-input v-model="form.username" placeholder="登录用 username" maxlength="64" />
       </el-form-item>
       <el-form-item label="显示名" prop="name">
         <el-input v-model="form.name" placeholder="界面展示名称" maxlength="64" />
       </el-form-item>
-      <el-form-item v-if="!isEditMode" label="邮箱" prop="email">
+      <el-form-item label="邮箱" prop="email">
         <el-input v-model="form.email" placeholder="请输入邮箱" />
       </el-form-item>
-      <el-form-item v-if="isEditMode" label="邮箱">
-        <el-input v-model="form.email" readonly />
-      </el-form-item>
-      <el-form-item v-if="!isEditMode" label="角色" prop="role">
+      <el-form-item label="角色" prop="role">
         <el-select v-model="form.role" placeholder="请选择角色" style="width: 100%">
           <el-option
             v-for="r in ROLE_OPTIONS"
@@ -122,18 +141,14 @@ async function handleAction() {
           />
         </el-select>
       </el-form-item>
-      <el-form-item v-if="isEditMode" label="角色">
-        <el-input :model-value="form.role" readonly />
-      </el-form-item>
-      <el-form-item v-if="!isEditMode" label="密码" prop="password">
+      <el-form-item label="密码" prop="password">
         <el-input
           v-model="form.password"
           type="password"
           show-password
-          placeholder="至少 6 位"
+          :placeholder="isEditMode ? '不修改请留空' : '至少 6 位'"
         />
       </el-form-item>
-      <p v-if="isEditMode" class="edit-tip">当前编辑接口仅更新显示名（name）。</p>
     </el-form>
 
     <template #footer>
@@ -144,11 +159,3 @@ async function handleAction() {
     </template>
   </el-dialog>
 </template>
-
-<style scoped>
-.edit-tip {
-  margin: 0 0 0 100px;
-  font-size: 12px;
-  color: #9ca3af;
-}
-</style>

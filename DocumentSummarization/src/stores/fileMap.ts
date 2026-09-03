@@ -10,6 +10,7 @@ function cloneFiles(files: MappedFile[]): MappedFile[] {
 }
 
 export const useFileMapStore = defineStore('fileMap', () => {
+  /** 仍保留旧 mock，便于本地演示；真实项目数据通过 setProjectFiles 写入 */
   const files = ref<MappedFile[]>(cloneFiles(MOCK_MAPPED_FILES))
 
   function filesOf(projectId: string): MappedFile[] {
@@ -22,6 +23,12 @@ export const useFileMapStore = defineStore('fileMap', () => {
 
   function projectStats(projectId: string) {
     return statsOf(filesOf(projectId))
+  }
+
+  /** 用接口数据替换某项目下的映射文件（不影响其他项目） */
+  function setProjectFiles(projectId: string, next: MappedFile[]) {
+    const others = files.value.filter((f) => f.projectId !== projectId)
+    files.value = [...others, ...next.map((f) => ({ ...f, projectId }))]
   }
 
   function addComment(
@@ -58,6 +65,7 @@ export const useFileMapStore = defineStore('fileMap', () => {
     filesOf,
     getFile,
     projectStats,
+    setProjectFiles,
     addComment,
     changeCountOf,
   }

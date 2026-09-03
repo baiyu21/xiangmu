@@ -6,7 +6,7 @@ import { useUserStore } from '@/stores/user'
 import {
   getUserProfile,
   updateUserProfile,
-  sendRegisterCode,
+  sendPasswordChangeCode,
   normalizeUserProfile,
   getGithubToken,
   updateGithubToken,
@@ -17,6 +17,27 @@ const userStore = useUserStore()
 
 /* ==================== 基本信息 ==================== */
 
+/** 角色：客户 / 项目成员 / 管理员 */
+const ROLE_OPTIONS = [
+  { label: '客户', value: 'customer' },
+  { label: '项目成员', value: 'member' },
+  { label: '管理员', value: 'admin' },
+]
+
+const ROLE_ALIASES: Record<string, string> = {
+  customer: 'customer',
+  客户: 'customer',
+  member: 'member',
+  项目成员: 'member',
+  admin: 'admin',
+  管理员: 'admin',
+}
+
+function normalizeRole(value?: string) {
+  if (!value) return ''
+  return ROLE_ALIASES[value] || ROLE_ALIASES[value.trim()] || value
+}
+
 const profileLoading = ref(false)
 const profileSaving = ref(false)
 const profileFormRef = ref<FormInstance>()
@@ -24,13 +45,17 @@ const profile = reactive({
   username: userStore.profile?.username || '',
   displayName: userStore.profile?.displayName || '',
   email: userStore.profile?.email || '',
-  gitName: '',
   role: '',
-  projects: '',
 })
 
 const profileRules: FormRules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   displayName: [{ required: true, message: '请输入显示名', trigger: 'blur' }],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+  ],
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
 }
 
 function applyProfileToForm(p: {
@@ -38,13 +63,11 @@ function applyProfileToForm(p: {
   displayName: string
   email?: string
   role?: string
-  gitName?: string
 }) {
   profile.username = p.username
   profile.displayName = p.displayName
   profile.email = p.email || ''
-  if (p.role) profile.role = p.role
-  if (p.gitName) profile.gitName = p.gitName
+  if (p.role) profile.role = normalizeRole(p.role)
 }
 
 watch(
@@ -87,20 +110,33 @@ async function saveProfile() {
 
   profileSaving.value = true
   try {
-    const raw = await updateUserProfile({ name: profile.displayName.trim() })
+    const username = profile.username.trim()
+    const displayName = profile.displayName.trim()
+    const email = profile.email.trim()
+    const role = profile.role
+
+    const raw = await updateUserProfile({
+      username,
+      name: displayName,
+      email,
+      role,
+    })
     const normalized = normalizeUserProfile(raw, {
-      username: profile.username,
-      displayName: profile.displayName.trim(),
-      email: profile.email,
+      username,
+      displayName,
+      email,
+      role,
     })
     applyProfileToForm({
-      ...normalized,
-      displayName: normalized.displayName || profile.displayName.trim(),
+      username: normalized.username || username,
+      displayName: normalized.displayName || displayName,
+      email: normalized.email || email,
+      role: normalized.role || role,
     })
     userStore.patchProfile({
-      username: normalized.username || profile.username,
-      displayName: normalized.displayName || profile.displayName.trim(),
-      email: normalized.email || profile.email,
+      username: normalized.username || username,
+      displayName: normalized.displayName || displayName,
+      email: normalized.email || email,
     })
     ElMessage.success('资料已保存')
   } catch {
@@ -252,7 +288,7 @@ async function sendEmailCode() {
 
   codeLoading.value = true
   try {
-    await sendRegisterCode({ email: profile.email.trim() })
+    await sendPasswordChangeCode()
     ElMessage.success(`验证码已发送至 ${profile.email}`)
     stopCountdown()
     startCountdown()
@@ -330,7 +366,7 @@ onUnmounted(() => {
       <template #header>
         <div class="card-header">
           <span class="card-title">基本信息</span>
-          <span class="card-sub">显示名可修改并同步到服务器</span>
+          <span class="card-sub">资料可编辑并同步到服务器</span>
         </div>
       </template>
 
@@ -351,33 +387,30 @@ onUnmounted(() => {
         >
           <el-row :gutter="24">
             <el-col :span="12">
-              <el-form-item label="用户名">
-                <el-input v-model="profile.username" readonly />
+              <el-form-item label="用户名" prop="username">
+                <el-input v-model="profile.username" placeholder="请输入用户名" maxlength="64" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item label="显示名" prop="displayName">
-                <el-input v-model="profile.displayName" placeholder="请输入显示名" />
+                <el-input v-model="profile.displayName" placeholder="请输入显示名" maxlength="64" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="邮箱">
-                <el-input v-model="profile.email" readonly />
+              <el-form-item label="邮箱" prop="email">
+                <el-input v-model="profile.email" placeholder="请输入邮箱" maxlength="128" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="角色">
-                <el-input v-model="profile.role" readonly placeholder="—" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="Git 名">
-                <el-input v-model="profile.gitName" readonly placeholder="—" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="可访问项目">
-                <el-input v-model="profile.projects" readonly placeholder="—" />
+              <el-form-item label="角色" prop="role">
+                <el-select v-model="profile.role" placeholder="请选择角色" style="width: 100%">
+                  <el-option
+                    v-for="opt in ROLE_OPTIONS"
+                    :key="opt.value"
+                    :label="opt.label"
+                    :value="opt.value"
+                  />
+                </el-select>
               </el-form-item>
             </el-col>
           </el-row>
@@ -443,7 +476,7 @@ onUnmounted(() => {
         <template #header>
           <div class="card-header">
             <span class="card-title">修改密码</span>
-            <span class="card-sub">需邮箱验证码（与注册同一发码接口）</span>
+            <span class="card-sub">需邮箱验证码（修改密码专用发码接口）</span>
           </div>
         </template>
 

@@ -1,33 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import type { ProjectListItem } from '@/api/modules/projects'
 
-export interface Project {
-  id: string
-  name: string
-  url: string
-  branch: string
-  mappedFiles: number
-  changeCount: number
-}
-
-const INITIAL_PROJECTS: Project[] = [
-  {
-    id: 'rd-xmz',
-    name: 'rd-xmz',
-    url: 'https://github.com/rd/xmz.git',
-    branch: 'main',
-    mappedFiles: 6,
-    changeCount: 18,
-  },
-  {
-    id: 'school-portal',
-    name: 'school-portal',
-    url: 'https://github.com/school/portal.git',
-    branch: 'develop',
-    mappedFiles: 3,
-    changeCount: 7,
-  },
-]
+export type Project = ProjectListItem
 
 export function parseProjectNameFromUrl(url: string): string {
   const cleaned = url.trim().replace(/\/+$/, '')
@@ -36,7 +11,7 @@ export function parseProjectNameFromUrl(url: string): string {
 }
 
 export const useProjectStore = defineStore('project', () => {
-  const projects = ref<Project[]>([...INITIAL_PROJECTS])
+  const projects = ref<Project[]>([])
 
   const projectCount = computed(() => projects.value.length)
 
@@ -44,35 +19,19 @@ export const useProjectStore = defineStore('project', () => {
     return projects.value.find((p) => p.id === id)
   }
 
-  function addProject(input: { url: string; branch?: string }): Project {
-    const url = input.url.trim()
-    if (!url) {
-      throw new Error('请输入仓库地址')
-    }
-    const name = parseProjectNameFromUrl(url)
-    let id = name
-    let suffix = 2
-    while (projects.value.some((p) => p.id === id)) {
-      id = `${name}-${suffix}`
-      suffix += 1
-    }
+  function setProjects(list: Project[]) {
+    projects.value = list
+  }
 
-    const project: Project = {
-      id,
-      name: id === name ? name : id,
-      url,
-      branch: (input.branch || 'main').trim() || 'main',
-      mappedFiles: 0,
-      changeCount: 0,
-    }
-    projects.value = [project, ...projects.value]
-    return project
+  function upsertProject(project: Project) {
+    projects.value = [project, ...projects.value.filter((p) => p.id !== project.id)]
   }
 
   return {
     projects,
     projectCount,
     getById,
-    addProject,
+    setProjects,
+    upsertProject,
   }
 })
