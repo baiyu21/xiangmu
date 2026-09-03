@@ -1,20 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { PageState, FileMapTree } from '@/components'
+import { PageState } from '@/components'
 import { useProjectStore } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
 import {
-  buildModuleNodes,
-  buildRepoNodes,
   changeCountOf,
   filterFiles,
   formatPath,
-  scopeLabel,
   sortFiles,
-  type MapMode,
+  type ChangeDoc,
   type SortKey,
-  type TreeNode,
 } from '@/utils/fileMap'
 
 const route = useRoute()
@@ -25,65 +21,64 @@ const fileMapStore = useFileMapStore()
 const projectId = computed(() => String(route.params.id || ''))
 const project = computed(() => projectStore.getById(projectId.value))
 
-const mode = ref<MapMode>('module')
-const scope = ref('all')
 const query = ref('')
 const sort = ref<SortKey>('count')
-const collapsed = ref(new Set<string>())
+const selectedFileId = ref<string | null>(null)
 
 const projectFiles = computed(() => fileMapStore.filesOf(projectId.value))
 const stats = computed(() => fileMapStore.projectStats(projectId.value))
 
-const treeNodes = computed(() => {
-  const list = projectFiles.value
-  const all: TreeNode = {
-    key: 'all',
-    label: mode.value === 'module' ? '全部模块' : '全部路径',
-    count: stats.value.changes,
-    kids: [],
-  }
-  const rest =
-    mode.value === 'module' ? buildModuleNodes(list) : buildRepoNodes(list)
-  return [all, ...rest]
+const tableRows = computed(() =>
+  sortFiles(filterFiles(projectFiles.value, query.value, 'all', 'module'), sort.value),
+)
+
+const selectedFile = computed(() => {
+  if (!selectedFileId.value) return undefined
+  return fileMapStore.getFile(projectId.value, selectedFileId.value)
 })
 
-const tableRows = computed(() =>
-  sortFiles(
-    filterFiles(projectFiles.value, query.value, scope.value, mode.value),
-    sort.value,
-  ),
-)
+const briefHistory = computed(() => {
+  if (!selectedFile.value) return [] as ChangeDoc[]
+  return [...selectedFile.value.docs].sort((a, b) => (a.at < b.at ? 1 : -1))
+})
 
 const pageStatus = computed(() => (project.value ? 'ready' : 'error'))
 
-watch(mode, () => {
-  scope.value = 'all'
-  collapsed.value = new Set()
-})
+watch(
+  tableRows,
+  (rows) => {
+    if (!rows.length) {
+      selectedFileId.value = null
+      return
+    }
+    if (!selectedFileId.value || !rows.some((r) => r.id === selectedFileId.value)) {
+      selectedFileId.value = rows[0]?.id ?? null
+    }
+  },
+  { immediate: true },
+)
 
 function backToList() {
   void router.push({ name: 'projects' })
 }
 
-function toggleCollapse(key: string) {
-  const next = new Set(collapsed.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  collapsed.value = next
+function selectFile(fileId: string) {
+  selectedFileId.value = fileId
 }
 
-function onSelectNode(node: TreeNode) {
-  if (node.fileId) {
-    goFile(node.fileId)
-    return
-  }
-  scope.value = node.key
-}
-
-function goFile(fileId: string) {
+function openFileDetail(fileId: string) {
   void router.push({
     name: 'project-file',
     params: { id: projectId.value, fileId },
+  })
+}
+
+function openDocDetail(docId: string) {
+  if (!selectedFileId.value) return
+  void router.push({
+    name: 'project-file',
+    params: { id: projectId.value, fileId: selectedFileId.value },
+    query: { doc: docId },
   })
 }
 </script>
@@ -106,19 +101,7 @@ function goFile(fileId: string) {
       <header class="page-header">
         <div>
           <h1>文件映射</h1>
-          <p>按文件查看修改次数、历史修改人与关联文档。</p>
-        </div>
-        <div class="seg">
-          <button
-            type="button"
-            :class="{ on: mode === 'module' }"
-            @click="mode = 'module'"
-          >
-            模块模式
-          </button>
-          <button type="button" :class="{ on: mode === 'repo' }" @click="mode = 'repo'">
-            代码仓库模式
-          </button>
+          <p>左侧选择文件，右侧预览修改历史简略版；点击某次修改进入完整详情。</p>
         </div>
       </header>
 
@@ -145,29 +128,11 @@ function goFile(fileId: string) {
       </div>
 
       <div class="map">
-        <aside class="tree">
-          <h3>{{ mode === 'module' ? '模块层级' : '代码仓库层级' }}</h3>
-          <div class="mode-tip">
-            {{
-              mode === 'module'
-                ? '按业务模块归组文件，适合按功能域浏览。'
-                : '按仓库目录树展开，适合按路径定位文件。'
-            }}
-          </div>
-          <FileMapTree
-            :nodes="treeNodes"
-            :scope="scope"
-            :collapsed="collapsed"
-            @select="onSelectNode"
-            @toggle="toggleCollapse"
-          />
-        </aside>
-
         <section class="list">
           <div class="list-hd">
             <div>
-              <span class="muted-label">当前范围</span>
-              <strong>{{ scopeLabel(scope, mode) }}</strong>
+              <span class="muted-label">文件列表</span>
+              <strong>全部文件</strong>
             </div>
             <span class="tag teal">{{ tableRows.length }} files</span>
           </div>
@@ -176,10 +141,8 @@ function goFile(fileId: string) {
               <thead>
                 <tr>
                   <th>文件</th>
-                  <th>修改次数</th>
-                  <th>历史修改人</th>
-                  <th>最近修改</th>
-                  <th>关联文档</th>
+                  <th>修改</th>
+                  <th>最近</th>
                   <th></th>
                 </tr>
               </thead>
@@ -188,7 +151,8 @@ function goFile(fileId: string) {
                   v-for="f in tableRows"
                   :key="f.id"
                   class="hit"
-                  @click="goFile(f.id)"
+                  :class="{ on: selectedFileId === f.id }"
+                  @click="selectFile(f.id)"
                 >
                   <td>
                     <div class="path">
@@ -199,26 +163,69 @@ function goFile(fileId: string) {
                   </td>
                   <td><strong>{{ changeCountOf(f) }}</strong></td>
                   <td>
-                    <div class="people">
-                      <span v-for="a in f.authors" :key="a" class="tag">@{{ a }}</span>
-                    </div>
-                  </td>
-                  <td>
                     <div class="mono">{{ f.lastAt }}</div>
                     <div class="sub">@{{ f.lastAuthor }}</div>
                   </td>
-                  <td><span class="tag teal">{{ f.docs.length }} 篇</span></td>
                   <td>
-                    <button type="button" class="btn-sm" @click.stop="goFile(f.id)">
+                    <button
+                      type="button"
+                      class="btn-sm"
+                      @click.stop="openFileDetail(f.id)"
+                    >
                       详情
                     </button>
                   </td>
                 </tr>
               </tbody>
             </table>
-            <div v-else class="empty">当前范围没有匹配的文件</div>
+            <div v-else class="empty">没有匹配的文件</div>
           </div>
         </section>
+
+        <aside class="history">
+          <div class="list-hd">
+            <div>
+              <span class="muted-label">修改历史 · 简略</span>
+              <strong v-if="selectedFile">{{ formatPath(selectedFile.path).name }}</strong>
+              <strong v-else>未选择文件</strong>
+            </div>
+            <span v-if="selectedFile" class="tag teal">{{ briefHistory.length }} 次</span>
+          </div>
+
+          <div v-if="selectedFile" class="history-bd">
+            <p v-if="selectedFile.aiBrief" class="file-brief">{{ selectedFile.aiBrief }}</p>
+
+            <button
+              v-for="d in briefHistory"
+              :key="d.id"
+              type="button"
+              class="tl-item"
+              @click="openDocDetail(d.id)"
+            >
+              <div class="tl-time">
+                {{ d.at }}
+                <div class="author">@{{ d.author }}</div>
+              </div>
+              <div class="tl-main">
+                <div class="tl-title">{{ d.title }}</div>
+                <div class="tl-desc">{{ d.summary }}</div>
+                <div class="tl-foot">
+                  <span class="doc-id">{{ d.id }}</span>
+                  <span
+                    v-if="(d.clientComments || []).length"
+                    class="tl-comment-badge"
+                  >
+                    {{ d.clientComments!.length }} 条注释
+                  </span>
+                  <span class="tl-hint">查看详情 →</span>
+                </div>
+              </div>
+            </button>
+
+            <div v-if="!briefHistory.length" class="empty">该文件暂无修改记录</div>
+          </div>
+          <div v-else class="empty">请在左侧选择一个文件</div>
+        </aside>
       </div>
     </PageState>
   </div>
@@ -249,12 +256,7 @@ function goFile(fileId: string) {
   color: #9ca3af;
 }
 .page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
   margin-bottom: 16px;
-  flex-wrap: wrap;
 }
 .page-header h1 {
   margin: 0 0 6px;
@@ -266,28 +268,6 @@ function goFile(fileId: string) {
   margin: 0;
   font-size: 14px;
   color: #6b7280;
-}
-.seg {
-  display: flex;
-  gap: 4px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 4px;
-}
-.seg button {
-  border: none;
-  background: transparent;
-  padding: 7px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #6b7280;
-  cursor: pointer;
-}
-.seg button.on {
-  background: #ecfdf5;
-  color: #0f766e;
-  font-weight: 500;
 }
 .stats {
   display: grid;
@@ -343,7 +323,7 @@ function goFile(fileId: string) {
 }
 .map {
   display: grid;
-  grid-template-columns: 270px 1fr;
+  grid-template-columns: minmax(280px, 42%) 1fr;
   gap: 12px;
   min-height: 520px;
 }
@@ -355,32 +335,15 @@ function goFile(fileId: string) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-.tree,
-.list {
+.list,
+.history {
   background: #fff;
   border-radius: 14px;
   border: 1px solid #e5e7eb;
   overflow: hidden;
-}
-.tree {
-  padding: 12px;
-}
-.tree h3,
-.muted-label {
-  margin: 0 0 10px;
-  font-size: 11px;
-  color: #6b7280;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-.mode-tip {
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #f5f8f6;
-  font-size: 12px;
-  color: #4b5563;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .list-hd {
   display: flex;
@@ -388,6 +351,15 @@ function goFile(fileId: string) {
   align-items: center;
   padding: 12px 14px;
   border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+.muted-label {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
 }
 .list-hd strong {
   display: block;
@@ -395,9 +367,11 @@ function goFile(fileId: string) {
   color: #111827;
   margin-top: 2px;
 }
-.list-bd {
+.list-bd,
+.history-bd {
   overflow: auto;
   max-height: 620px;
+  flex: 1;
 }
 .table {
   width: 100%;
@@ -408,15 +382,17 @@ function goFile(fileId: string) {
   text-align: left;
   font-weight: 500;
   color: #6b7280;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid #e5e7eb;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   background: #f7faf8;
+  position: sticky;
+  top: 0;
 }
 .table td {
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid #e5e7eb;
   vertical-align: top;
   color: #374151;
@@ -426,6 +402,9 @@ function goFile(fileId: string) {
 }
 .table tr.hit:hover td {
   background: #f4faf7;
+}
+.table tr.hit.on td {
+  background: #ecfdf5;
 }
 .path .dir {
   color: #9ca3af;
@@ -451,14 +430,6 @@ function goFile(fileId: string) {
 .tag.teal {
   background: #ecfdf5;
   color: #0f766e;
-  margin-top: 0;
-}
-.people {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.people .tag {
   margin-top: 0;
 }
 .mono {
@@ -489,5 +460,77 @@ function goFile(fileId: string) {
   text-align: center;
   color: #9ca3af;
   font-size: 14px;
+}
+.file-brief {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #4b5563;
+  background: #f8faf9;
+  border-bottom: 1px solid #e5e7eb;
+}
+.tl-item {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 12px;
+  padding: 14px;
+  border: none;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+}
+.tl-item:hover {
+  background: #f8fbf9;
+}
+.tl-time {
+  font-size: 12px;
+  color: #6b7280;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.tl-time .author {
+  margin-top: 4px;
+  color: #0f766e;
+  font-family: inherit;
+}
+.tl-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+.tl-desc {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.45;
+}
+.tl-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.doc-id {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #0f766e;
+  background: #ecfdf5;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.tl-comment-badge {
+  font-size: 11px;
+  color: #b45309;
+  background: #fff1df;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.tl-hint {
+  margin-left: auto;
+  font-size: 12px;
+  color: #0f766e;
 }
 </style>

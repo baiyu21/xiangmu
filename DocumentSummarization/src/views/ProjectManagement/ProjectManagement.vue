@@ -75,7 +75,7 @@ onMounted(() => {
     <header class="page-header">
       <div>
         <h1>项目管理</h1>
-        <p>登记与同步仓库，点击「进入概览」查看文件映射与文档详情。</p>
+        <p>登记与同步仓库，点击「进入概览」查看文件列表与修改历史简略版。</p>
       </div>
       <div class="header-actions">
         <button type="button" class="btn-ghost" @click="syncAll">全部同步</button>
@@ -84,7 +84,7 @@ onMounted(() => {
     </header>
 
     <div class="note">
-      <b>主路径：</b>项目管理 → 进入概览（文件映射）→ 文件详情 → 对应修改文档。
+      <b>主路径：</b>项目管理 → 进入概览（文件列表 + 修改历史简略）→ 文档详情 → 对应修改文档。
     </div>
 
     <PageState

@@ -44,6 +44,7 @@ export const useUserStore = defineStore('user', () => {
     profile.value = {
       username: payload.username,
       displayName: payload.displayName,
+      email: payload.email,
     }
     writeProfile(profile.value)
   }
