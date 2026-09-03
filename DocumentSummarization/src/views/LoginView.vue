@@ -47,7 +47,7 @@ const handleLogin = () => {
 
   ElMessage.success('登录成功')
   const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
-  void router.push(redirect || { name: 'personal' })
+  void router.push(redirect || { name: 'project-file' })
 }
 
 // ===== 注册表单 =====
