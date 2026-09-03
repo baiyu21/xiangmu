@@ -37,11 +37,16 @@ export {
 } from './modules/users'
 export {
   fetchProjects,
+  fetchProject,
   createProject,
   syncProject,
   normalizeProjectList,
   normalizeProjectItem,
+  normalizeProjectDetail,
+  normalizeMappedFile,
   type CreateProjectPayload,
   type SyncProjectPayload,
   type ProjectListItem,
+  type ProjectDetail,
+  type ProjectStats,
 } from './modules/projects'
