@@ -1,26 +1,50 @@
 <script setup lang="ts">
-import { onUnmounted, reactive, ref, watch } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import {
+  getUserProfile,
+  updateUserProfile,
+  sendRegisterCode,
+  normalizeUserProfile,
+  getGithubToken,
+  updateGithubToken,
+  normalizeGithubToken,
+} from '@/api'
 
 const userStore = useUserStore()
 
 /* ==================== 基本信息 ==================== */
 
+const profileLoading = ref(false)
+const profileSaving = ref(false)
 const profileFormRef = ref<FormInstance>()
 const profile = reactive({
-  username: userStore.profile?.username || 'demo-user',
-  displayName: userStore.profile?.displayName || '演示用户',
-  email: userStore.profile?.email || 'demo@example.com',
-  gitName: 'demo',
-  role: '管理员',
-  projects: '全部项目',
+  username: userStore.profile?.username || '',
+  displayName: userStore.profile?.displayName || '',
+  email: userStore.profile?.email || '',
+  gitName: '',
+  role: '',
+  projects: '',
 })
 
 const profileRules: FormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   displayName: [{ required: true, message: '请输入显示名', trigger: 'blur' }],
+}
+
+function applyProfileToForm(p: {
+  username: string
+  displayName: string
+  email?: string
+  role?: string
+  gitName?: string
+}) {
+  profile.username = p.username
+  profile.displayName = p.displayName
+  profile.email = p.email || ''
+  if (p.role) profile.role = p.role
+  if (p.gitName) profile.gitName = p.gitName
 }
 
 watch(
@@ -33,39 +57,86 @@ watch(
   },
 )
 
-async function saveProfile() {
-  if (!profileFormRef.value) return
-  await profileFormRef.value.validate((valid) => {
-    if (!valid) return
-    if (userStore.token) {
-      userStore.setSession({
-        token: userStore.token,
-        username: profile.username.trim(),
-        displayName: profile.displayName.trim(),
-        email: profile.email,
-      })
-    }
-    ElMessage.success('资料已保存（本地会话）')
-  })
+async function loadProfile() {
+  profileLoading.value = true
+  try {
+    const raw = await getUserProfile()
+    const normalized = normalizeUserProfile(raw, {
+      username: userStore.profile?.username,
+      displayName: userStore.profile?.displayName,
+      email: userStore.profile?.email,
+    })
+    applyProfileToForm(normalized)
+    userStore.patchProfile({
+      username: normalized.username,
+      displayName: normalized.displayName,
+      email: normalized.email,
+    })
+  } catch {
+    // 拦截器已提示；回退本地会话
+    if (userStore.profile) applyProfileToForm(userStore.profile)
+  } finally {
+    profileLoading.value = false
+  }
 }
 
-/* ==================== 访问令牌 ==================== */
+async function saveProfile() {
+  if (!profileFormRef.value || profileSaving.value) return
+  const valid = await profileFormRef.value.validate().catch(() => false)
+  if (!valid) return
 
-const TOKEN_STORAGE_KEY = 'ds_access_token'
+  profileSaving.value = true
+  try {
+    const raw = await updateUserProfile({ name: profile.displayName.trim() })
+    const normalized = normalizeUserProfile(raw, {
+      username: profile.username,
+      displayName: profile.displayName.trim(),
+      email: profile.email,
+    })
+    applyProfileToForm({
+      ...normalized,
+      displayName: normalized.displayName || profile.displayName.trim(),
+    })
+    userStore.patchProfile({
+      username: normalized.username || profile.username,
+      displayName: normalized.displayName || profile.displayName.trim(),
+      email: normalized.email || profile.email,
+    })
+    ElMessage.success('资料已保存')
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    profileSaving.value = false
+  }
+}
 
+/* ==================== 访问令牌（GitHub Token） ==================== */
+
+const tokenLoading = ref(false)
+const tokenSaving = ref(false)
 const savedToken = ref('')
 const tokenInput = ref('')
+const tokenConfigured = ref(false)
 
-function loadToken() {
-  let stored = localStorage.getItem(TOKEN_STORAGE_KEY) || ''
-  if (!stored) {
-    stored = 'ghp_demoTokenPlaceholder1234567890'
-    localStorage.setItem(TOKEN_STORAGE_KEY, stored)
+async function loadGithubToken() {
+  tokenLoading.value = true
+  try {
+    const raw = await getGithubToken()
+    const value = normalizeGithubToken(raw)
+    savedToken.value = value
+    tokenInput.value = value
+    tokenConfigured.value = Boolean(value)
+    // 清理旧版本地占位
+    localStorage.removeItem('ds_access_token')
+  } catch {
+    // 拦截器已提示；保持空
+    savedToken.value = ''
+    tokenInput.value = ''
+    tokenConfigured.value = false
+  } finally {
+    tokenLoading.value = false
   }
-  savedToken.value = stored
-  tokenInput.value = stored
 }
-loadToken()
 
 async function pasteToken() {
   try {
@@ -85,42 +156,62 @@ async function pasteToken() {
   }
 }
 
-function updateToken() {
+async function updateToken() {
   const val = tokenInput.value.trim()
   if (!val) {
     ElMessage.warning('令牌不能为空')
     return
   }
-  localStorage.setItem(TOKEN_STORAGE_KEY, val)
-  savedToken.value = val
-  ElMessage.success('访问令牌已保存')
+  if (tokenSaving.value) return
+  tokenSaving.value = true
+  try {
+    const raw = await updateGithubToken({ github_token: val })
+    const next = normalizeGithubToken(raw) || val
+    savedToken.value = next
+    tokenInput.value = next
+    tokenConfigured.value = true
+    ElMessage.success('访问令牌已更新')
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    tokenSaving.value = false
+  }
 }
 
-function deleteToken() {
-  tokenInput.value = ''
-  savedToken.value = ''
-  localStorage.removeItem(TOKEN_STORAGE_KEY)
-  ElMessage.success('访问令牌已删除')
+async function deleteToken() {
+  if (tokenSaving.value) return
+  tokenSaving.value = true
+  try {
+    // 后端未单独提供删除接口时，用空字符串覆盖
+    await updateGithubToken({ github_token: '' })
+    tokenInput.value = ''
+    savedToken.value = ''
+    tokenConfigured.value = false
+    ElMessage.success('访问令牌已删除')
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    tokenSaving.value = false
+  }
 }
 
 /* ==================== 修改密码（邮箱验证码） ==================== */
 
 interface PasswordForm {
-  oldPassword: string
   newPassword: string
   confirmPassword: string
   captcha: string
 }
 
 const pwdFormRef = ref<FormInstance>()
+const pwdSaving = ref(false)
+const codeLoading = ref(false)
 const pwdForm = reactive<PasswordForm>({
-  oldPassword: '',
   newPassword: '',
   confirmPassword: '',
   captcha: '',
 })
 
-const emailCode = ref('')
 const countdown = ref(0)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
@@ -149,26 +240,30 @@ function validateEmail(email: string) {
 }
 
 async function sendEmailCode() {
-  if (countdown.value > 0) return
+  if (countdown.value > 0 || codeLoading.value) return
   if (!profile.email) {
-    ElMessage.warning('请先在基本信息中填写邮箱')
+    ElMessage.warning('当前账号未绑定邮箱，无法发送验证码')
     return
   }
   if (!validateEmail(profile.email)) {
     ElMessage.warning('邮箱格式不正确')
     return
   }
-  // 生成 6 位数字验证码（后端接入后改为真实请求）
-  const code = Math.floor(100000 + Math.random() * 900000).toString()
-  emailCode.value = code
-  pwdForm.captcha = ''
-  stopCountdown()
-  startCountdown()
-  ElMessage.info(`验证码已发送至 ${profile.email}（演示模式：${code}）`)
+
+  codeLoading.value = true
+  try {
+    await sendRegisterCode({ email: profile.email.trim() })
+    ElMessage.success(`验证码已发送至 ${profile.email}`)
+    stopCountdown()
+    startCountdown()
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    codeLoading.value = false
+  }
 }
 
 const passwordRules: FormRules<PasswordForm> = {
-  oldPassword: [{ required: true, message: '请输入旧密码', trigger: 'blur' }],
   newPassword: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
     { min: 6, max: 32, message: '密码长度 6-32 位', trigger: 'blur' },
@@ -186,38 +281,38 @@ const passwordRules: FormRules<PasswordForm> = {
       trigger: 'blur',
     },
   ],
-  captcha: [
-    { required: true, message: '请输入邮箱验证码', trigger: 'blur' },
-    {
-      validator: (_rule, value, callback) => {
-        if (!emailCode.value) {
-          callback(new Error('请先获取验证码'))
-          return
-        }
-        if (value.trim() !== emailCode.value) {
-          callback(new Error('验证码不正确'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'blur',
-    },
-  ],
+  captcha: [{ required: true, message: '请输入邮箱验证码', trigger: 'blur' }],
 }
 
 async function submitPassword() {
-  if (!pwdFormRef.value) return
-  await pwdFormRef.value.validate((valid) => {
-    if (!valid) return
-    ElMessage.success('密码修改成功（模拟）')
-    pwdForm.oldPassword = ''
+  if (!pwdFormRef.value || pwdSaving.value) return
+  const valid = await pwdFormRef.value.validate().catch(() => false)
+  if (!valid) return
+
+  pwdSaving.value = true
+  try {
+    await updateUserProfile({
+      password: pwdForm.newPassword,
+      password_confirmation: pwdForm.confirmPassword,
+      code: pwdForm.captcha.trim(),
+    })
+    ElMessage.success('密码修改成功')
     pwdForm.newPassword = ''
     pwdForm.confirmPassword = ''
     pwdForm.captcha = ''
-    emailCode.value = ''
     stopCountdown()
-  })
+    pwdFormRef.value.resetFields()
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    pwdSaving.value = false
+  }
 }
+
+onMounted(() => {
+  void loadProfile()
+  void loadGithubToken()
+})
 
 onUnmounted(() => {
   stopCountdown()
@@ -225,37 +320,28 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" v-loading="profileLoading">
     <header class="page-header">
       <h1>个人中心</h1>
       <p>管理你的基本信息、访问令牌和账户安全设置。</p>
     </header>
 
-    <!-- 上：基本信息 -->
     <el-card class="card" shadow="never">
       <template #header>
         <div class="card-header">
           <span class="card-title">基本信息</span>
-          <span class="card-sub">查看并编辑你的账户资料</span>
+          <span class="card-sub">显示名可修改并同步到服务器</span>
         </div>
       </template>
 
       <div class="profile-body">
-        <!-- 头像 -->
         <div class="avatar-wrap">
           <el-avatar :size="120" class="avatar">
-            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="50" cy="40" r="22" fill="#e0e7ff" />
-              <ellipse cx="50" cy="85" rx="30" ry="18" fill="#2a3454" />
-              <circle cx="42" cy="38" r="3" fill="#4b5563" />
-              <circle cx="58" cy="38" r="3" fill="#4b5563" />
-              <path d="M42 48 Q50 54 58 48" stroke="#4b5563" stroke-width="2" fill="none" stroke-linecap="round" />
-            </svg>
+            {{ userStore.avatarLetter }}
           </el-avatar>
-          <span class="avatar-tip">默认头像</span>
+          <span class="avatar-tip">头像首字母</span>
         </div>
 
-        <!-- 双列字段网格 -->
         <el-form
           ref="profileFormRef"
           :model="profile"
@@ -265,8 +351,8 @@ onUnmounted(() => {
         >
           <el-row :gutter="24">
             <el-col :span="12">
-              <el-form-item label="用户名" prop="username">
-                <el-input v-model="profile.username" placeholder="请输入用户名" />
+              <el-form-item label="用户名">
+                <el-input v-model="profile.username" readonly />
               </el-form-item>
             </el-col>
             <el-col :span="12">
@@ -275,41 +361,43 @@ onUnmounted(() => {
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="Git 名">
-                <el-input v-model="profile.gitName" placeholder="请输入 Git 用户名" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="角色">
-                <el-input v-model="profile.role" readonly />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
               <el-form-item label="邮箱">
                 <el-input v-model="profile.email" readonly />
               </el-form-item>
             </el-col>
             <el-col :span="12">
+              <el-form-item label="角色">
+                <el-input v-model="profile.role" readonly placeholder="—" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="Git 名">
+                <el-input v-model="profile.gitName" readonly placeholder="—" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
               <el-form-item label="可访问项目">
-                <el-input v-model="profile.projects" placeholder="请输入可访问项目" />
+                <el-input v-model="profile.projects" readonly placeholder="—" />
               </el-form-item>
             </el-col>
           </el-row>
           <div class="profile-footer">
-            <el-button type="primary" @click="saveProfile">保存资料</el-button>
+            <el-button type="primary" :loading="profileSaving" @click="saveProfile">
+              保存资料
+            </el-button>
           </div>
         </el-form>
       </div>
     </el-card>
 
-    <!-- 下：两个并排卡片 -->
     <div class="lower-row">
-      <!-- 访问令牌 -->
-      <el-card class="card" shadow="never">
+      <el-card class="card" shadow="never" v-loading="tokenLoading">
         <template #header>
           <div class="card-header">
             <span class="card-title">访问令牌</span>
-            <span class="card-sub">用于同步私有仓库（当前为占位）</span>
+            <span class="card-sub">
+              GitHub Token（{{ tokenConfigured ? '已配置' : '未配置' }}）
+            </span>
           </div>
         </template>
 
@@ -325,21 +413,37 @@ onUnmounted(() => {
             </template>
           </el-input>
           <p class="hint">
-            令牌存储在浏览器本地(localStorage),当前值长度 {{ savedToken.length }} 位。
+            令牌由服务端加密保存；当前展示长度 {{ savedToken.length }} 位
+            （若后端返回掩码则非完整明文）。
           </p>
           <div class="btn-row">
-            <el-button type="primary" plain size="small" @click="updateToken">更新 Token</el-button>
-            <el-button type="danger" plain size="small" @click="deleteToken">删除 Token</el-button>
+            <el-button
+              type="primary"
+              plain
+              size="small"
+              :loading="tokenSaving"
+              @click="updateToken"
+            >
+              更新 Token
+            </el-button>
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              :loading="tokenSaving"
+              @click="deleteToken"
+            >
+              删除 Token
+            </el-button>
           </div>
         </div>
       </el-card>
 
-      <!-- 修改密码 -->
       <el-card class="card" shadow="never">
         <template #header>
           <div class="card-header">
             <span class="card-title">修改密码</span>
-            <span class="card-sub">通过邮箱验证码验证</span>
+            <span class="card-sub">需邮箱验证码（与注册同一发码接口）</span>
           </div>
         </template>
 
@@ -350,14 +454,6 @@ onUnmounted(() => {
           label-width="90px"
           class="pwd-form"
         >
-          <el-form-item label="旧密码" prop="oldPassword">
-            <el-input
-              v-model="pwdForm.oldPassword"
-              type="password"
-              show-password
-              placeholder="请输入当前密码"
-            />
-          </el-form-item>
           <el-form-item label="新密码" prop="newPassword">
             <el-input
               v-model="pwdForm.newPassword"
@@ -375,19 +471,24 @@ onUnmounted(() => {
             />
           </el-form-item>
           <el-form-item label="验证码" prop="captcha">
-            <el-input v-model="pwdForm.captcha" placeholder="请输入邮箱收到的验证码" maxlength="6">
+            <el-input v-model="pwdForm.captcha" placeholder="请输入邮箱收到的验证码" maxlength="8">
               <template #append>
-                <el-button
-                  :disabled="countdown > 0"
-                  @click="sendEmailCode"
-                >
-                  {{ countdown > 0 ? `${countdown}s 后重发` : '发送验证码' }}
+                <el-button :disabled="countdown > 0 || codeLoading" @click="sendEmailCode">
+                  {{
+                    countdown > 0
+                      ? `${countdown}s 后重发`
+                      : codeLoading
+                        ? '发送中…'
+                        : '发送验证码'
+                  }}
                 </el-button>
               </template>
             </el-input>
           </el-form-item>
           <div class="pwd-footer">
-            <el-button type="primary" @click="submitPassword">提交修改</el-button>
+            <el-button type="primary" :loading="pwdSaving" @click="submitPassword">
+              提交修改
+            </el-button>
           </div>
         </el-form>
       </el-card>
@@ -440,7 +541,6 @@ onUnmounted(() => {
   color: #9ca3af;
 }
 
-/* 基本信息 */
 .profile-body {
   display: flex;
   gap: 40px;
@@ -456,10 +556,11 @@ onUnmounted(() => {
   padding-top: 4px;
 }
 
-.avatar :deep(.el-avatar) {
-  background: #f5f3ff;
-  border: 2px solid #e0e7ff;
-  border-radius: 16px;
+.avatar {
+  background: #0f766e;
+  color: #fff;
+  font-size: 42px;
+  font-weight: 600;
 }
 
 .avatar-tip {
@@ -482,7 +583,6 @@ onUnmounted(() => {
   margin-top: 6px;
 }
 
-/* 下方并排 */
 .lower-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -490,7 +590,16 @@ onUnmounted(() => {
   margin-top: 20px;
 }
 
-/* 令牌 */
+@media (max-width: 900px) {
+  .lower-row {
+    grid-template-columns: 1fr;
+  }
+  .profile-body {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
 .token-body .hint {
   font-size: 12px;
   color: #9ca3af;
@@ -504,7 +613,6 @@ onUnmounted(() => {
   margin-top: 16px;
 }
 
-/* 修改密码 */
 .pwd-form :deep(.el-form-item) {
   margin-bottom: 16px;
 }
@@ -513,5 +621,27 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+  .card :deep(.el-card__header),
+  .card :deep(.el-card__body) {
+    padding: 14px;
+  }
+
+  .profile-form :deep(.el-col) {
+    max-width: 100%;
+    flex: 0 0 100%;
+  }
+
+  .profile-form :deep(.el-form-item__label),
+  .pwd-form :deep(.el-form-item__label) {
+    width: 72px !important;
+  }
+
+  .profile-form :deep(.el-form-item__content),
+  .pwd-form :deep(.el-form-item__content) {
+    margin-left: 72px !important;
+  }
 }
 </style>

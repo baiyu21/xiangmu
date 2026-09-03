@@ -335,6 +335,53 @@ function openDocDetail(docId: string) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+@media (max-width: 640px) {
+  .tools {
+    flex-direction: column;
+  }
+
+  .field.grow,
+  .field {
+    width: 100%;
+  }
+
+  .stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat {
+    padding: 12px;
+  }
+
+  .stat b {
+    font-size: 18px;
+  }
+
+  .tl-item {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .tl-hint {
+    margin-left: 0;
+  }
+
+  .list-bd,
+  .history-bd {
+    max-height: none;
+  }
+
+  .table {
+    font-size: 13px;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px;
+  }
+}
 .list,
 .history {
   background: #fff;

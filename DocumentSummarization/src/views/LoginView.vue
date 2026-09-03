@@ -331,7 +331,7 @@ const handleRegister = async () => {
 }
 
 .card {
-  width: 420px;
+  width: min(420px, 100%);
   background: #ffffff;
   border-radius: 16px;
   padding: 36px 36px 32px;
@@ -518,5 +518,29 @@ const handleRegister = async () => {
 .btn-primary:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .auth-page {
+    padding: 20px 12px;
+    align-items: flex-start;
+  }
+
+  .card {
+    padding: 24px 18px 22px;
+    border-radius: 14px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .code-row {
+    flex-direction: column;
+  }
+
+  .btn-code {
+    height: 42px;
+  }
 }
 </style>

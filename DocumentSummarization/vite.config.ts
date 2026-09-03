@@ -19,9 +19,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // 浏览器请求 /api/* → 后端 http://127.0.0.1:8000/api/*
+      // 本地 /api → 已部署后端
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://139.155.154.172:5554',
         changeOrigin: true,
       },
     },

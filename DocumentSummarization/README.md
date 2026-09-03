@@ -49,8 +49,12 @@ src/
 
 只提交 `.env.example`。本地复制为 `.env.development` 后按需修改：
 
-- `VITE_API_BASE_URL`：后端 API 根路径（本地推荐 `/api`，由 Vite 代理到 `http://127.0.0.1:8000`）
+- `VITE_API_BASE_URL`：后端 API 根路径
+  - 本地开发：`/api`（Vite 代理到 `http://139.155.154.172:5554`）
+  - 生产构建：`http://139.155.154.172:5554/api`
 - `VITE_APP_TITLE`：应用标题
+
+当前对接后端：[http://139.155.154.172:5554](http://139.155.154.172:5554)
 
 认证接口（相对 `VITE_API_BASE_URL`）：
 
