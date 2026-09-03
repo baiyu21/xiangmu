@@ -49,6 +49,22 @@ export const useUserStore = defineStore('user', () => {
     writeProfile(profile.value)
   }
 
+  function patchProfile(partial: Partial<UserProfile>) {
+    if (!profile.value) {
+      profile.value = {
+        username: partial.username || '',
+        displayName: partial.displayName || partial.username || '',
+        email: partial.email,
+      }
+    } else {
+      profile.value = {
+        ...profile.value,
+        ...partial,
+      }
+    }
+    writeProfile(profile.value)
+  }
+
   function clearAuth() {
     token.value = null
     profile.value = null
@@ -62,6 +78,7 @@ export const useUserStore = defineStore('user', () => {
     isAuthenticated,
     avatarLetter,
     setSession,
+    patchProfile,
     clearAuth,
   }
 })

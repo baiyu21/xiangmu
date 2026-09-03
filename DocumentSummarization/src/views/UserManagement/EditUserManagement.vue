@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage } from 'element-plus'
 
-interface UserFormData {
+export interface UserFormData {
   id?: number
+  username: string
   name: string
   email: string
-  gitName: string
   role: string
-  projects: string
-  status: string
+  password?: string
 }
 
 const props = defineProps<{
   open: boolean
   formData?: UserFormData | null
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,52 +22,58 @@ const emit = defineEmits<{
   submit: [data: UserFormData]
 }>()
 
-const ROLE_OPTIONS = ['管理员', '项目成员', '只读成员']
-const PROJECT_OPTIONS = ['rd-xmz', 'school-portal']
+/** 与后端 role 字段对齐 */
+const ROLE_OPTIONS = [
+  { label: '管理员', value: 'admin' },
+  { label: '客户', value: 'customer' },
+  { label: '项目成员', value: 'member' },
+  { label: '只读成员', value: 'readonly' },
+]
 
 const isEditMode = computed(() => props.formData?.id != null)
 
 const formRef = ref<FormInstance>()
 const form = reactive<UserFormData>({
+  username: '',
   name: '',
   email: '',
-  gitName: '',
-  role: '项目成员',
-  projects: '',
-  status: '启用',
+  role: 'customer',
+  password: '',
 })
 
-// 表单内用数组做多选，提交时与列表行 projects(string) 字段保持契约一致
-const projectList = computed<string[]>({
-  get: () => form.projects.split(',').map((s) => s.trim()).filter(Boolean),
-  set: (val) => {
-    form.projects = val.join(', ')
-  },
-})
+const rules = computed<FormRules<UserFormData>>(() => ({
+  username: isEditMode.value
+    ? []
+    : [{ required: true, message: '请输入登录用户名', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入显示名', trigger: 'blur' }],
+  email: isEditMode.value
+    ? []
+    : [
+        { required: true, message: '请输入邮箱', trigger: 'blur' },
+        { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
+      ],
+  role: isEditMode.value
+    ? []
+    : [{ required: true, message: '请选择角色', trigger: 'change' }],
+  password: isEditMode.value
+    ? []
+    : [
+        { required: true, message: '请输入密码', trigger: 'blur' },
+        { min: 6, message: '密码至少 6 位', trigger: 'blur' },
+      ],
+}))
 
-const rules: FormRules<UserFormData> = {
-  name: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  email: [
-    { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
-  ],
-  gitName: [{ required: true, message: '请输入 Git 用户名', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-}
-
-// 打开时回填，关闭时清空校验态
 watch(
   () => props.open,
   (val) => {
     if (!val) return
     const d = props.formData
     form.id = d?.id
+    form.username = d?.username ?? ''
     form.name = d?.name ?? ''
     form.email = d?.email ?? ''
-    form.gitName = d?.gitName ?? ''
-    form.role = d?.role ?? '项目成员'
-    form.projects = d?.projects ?? ''
-    form.status = d?.status ?? '启用'
+    form.role = d?.role ?? 'customer'
+    form.password = ''
     formRef.value?.clearValidate()
   },
 )
@@ -78,13 +83,10 @@ function handleClose() {
 }
 
 async function handleAction() {
-  if (!formRef.value) return
-  await formRef.value.validate((valid) => {
-    if (!valid) return
-    emit('submit', { ...form })
-    ElMessage.success(isEditMode.value ? '用户已更新' : '用户已创建')
-    emit('update:open', false)
-  })
+  if (!formRef.value || props.submitting) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
+  emit('submit', { ...form })
 }
 </script>
 
@@ -92,49 +94,61 @@ async function handleAction() {
   <el-dialog
     :model-value="open"
     :title="isEditMode ? '编辑用户' : '新建用户'"
-    width="560px"
+    width="520px"
     :close-on-click-modal="false"
     append-to-body
     @update:model-value="(v: boolean) => emit('update:open', v)"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-      <el-form-item label="用户名" prop="name">
-        <el-input v-model="form.name" placeholder="请输入用户名" maxlength="32" />
+      <el-form-item v-if="!isEditMode" label="登录用户名" prop="username">
+        <el-input v-model="form.username" placeholder="登录用 username" maxlength="64" />
       </el-form-item>
-      <el-form-item label="邮箱" prop="email">
+      <el-form-item label="显示名" prop="name">
+        <el-input v-model="form.name" placeholder="界面展示名称" maxlength="64" />
+      </el-form-item>
+      <el-form-item v-if="!isEditMode" label="邮箱" prop="email">
         <el-input v-model="form.email" placeholder="请输入邮箱" />
       </el-form-item>
-      <el-form-item label="Git 用户名" prop="gitName">
-        <el-input v-model="form.gitName" placeholder="请输入 Git 用户名" />
+      <el-form-item v-if="isEditMode" label="邮箱">
+        <el-input v-model="form.email" readonly />
       </el-form-item>
-      <el-form-item label="角色" prop="role">
+      <el-form-item v-if="!isEditMode" label="角色" prop="role">
         <el-select v-model="form.role" placeholder="请选择角色" style="width: 100%">
-          <el-option v-for="r in ROLE_OPTIONS" :key="r" :label="r" :value="r" />
+          <el-option
+            v-for="r in ROLE_OPTIONS"
+            :key="r.value"
+            :label="r.label"
+            :value="r.value"
+          />
         </el-select>
       </el-form-item>
-      <el-form-item label="所属项目" prop="projects">
-        <el-select
-          v-model="projectList"
-          multiple
-          placeholder="请选择项目"
-          style="width: 100%"
-        >
-          <el-option v-for="p in PROJECT_OPTIONS" :key="p" :label="p" :value="p" />
-        </el-select>
+      <el-form-item v-if="isEditMode" label="角色">
+        <el-input :model-value="form.role" readonly />
       </el-form-item>
-      <el-form-item label="状态" prop="status">
-        <el-radio-group v-model="form.status">
-          <el-radio value="启用">启用</el-radio>
-          <el-radio value="停用">停用</el-radio>
-        </el-radio-group>
+      <el-form-item v-if="!isEditMode" label="密码" prop="password">
+        <el-input
+          v-model="form.password"
+          type="password"
+          show-password
+          placeholder="至少 6 位"
+        />
       </el-form-item>
+      <p v-if="isEditMode" class="edit-tip">当前编辑接口仅更新显示名（name）。</p>
     </el-form>
 
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
-      <el-button type="primary" @click="handleAction">
+      <el-button type="primary" :loading="submitting" @click="handleAction">
         {{ isEditMode ? '保存' : '创建' }}
       </el-button>
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.edit-tip {
+  margin: 0 0 0 100px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+</style>

@@ -26,3 +26,26 @@ describe('normalizeAuthSession', () => {
     expect(() => normalizeAuthSession({ user: { name: 'x' } })).toThrow(/token/)
   })
 })
+
+describe('normalizeUserProfile', () => {
+  it('场景：解析 name / email', async () => {
+    const { normalizeUserProfile } = await import('../modules/auth')
+    const profile = normalizeUserProfile({
+      username: 'user',
+      name: '王文杰',
+      email: 'a@b.com',
+      role: 'admin',
+    })
+    expect(profile.displayName).toBe('王文杰')
+    expect(profile.email).toBe('a@b.com')
+    expect(profile.role).toBe('admin')
+  })
+})
+
+describe('normalizeGithubToken', () => {
+  it('场景：解析 github_token', async () => {
+    const { normalizeGithubToken } = await import('../modules/auth')
+    expect(normalizeGithubToken({ github_token: 'ghp_xxx' })).toBe('ghp_xxx')
+    expect(normalizeGithubToken({ data: { github_token: 'pat_1' } })).toBe('pat_1')
+  })
+})
