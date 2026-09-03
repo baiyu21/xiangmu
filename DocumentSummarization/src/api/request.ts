@@ -16,9 +16,36 @@ request.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config
 })
 
+function isBizPayload(payload: unknown): payload is {
+  code: number | string
+  msg?: string
+  message?: string
+  data?: unknown
+} {
+  return Boolean(payload && typeof payload === 'object' && 'code' in payload)
+}
+
+function isBizSuccess(code: number | string) {
+  return code === 0 || code === 200 || code === '0' || code === '200'
+}
+
 request.interceptors.response.use(
-  (response) => response.data,
-  (error: AxiosError<{ msg?: string; message?: string }>) => {
+  (response) => {
+    const payload = response.data
+
+    // 统一包装：{ code, message|msg, data }
+    if (isBizPayload(payload)) {
+      if (isBizSuccess(payload.code)) {
+        return payload.data !== undefined ? payload.data : payload
+      }
+      const message = payload.msg || payload.message || '请求失败'
+      ElMessage.error(message)
+      return Promise.reject(payload)
+    }
+
+    return payload
+  },
+  (error: AxiosError<{ msg?: string; message?: string; code?: number | string }>) => {
     const status = error.response?.status
     const message =
       error.response?.data?.msg ||
@@ -29,9 +56,11 @@ request.interceptors.response.use(
     if (status === 401) {
       const userStore = useUserStore()
       userStore.clearAuth()
-      ElMessage.error('请重新登录')
       if (router.currentRoute.value.name !== 'login') {
+        ElMessage.error('请重新登录')
         void router.push({ name: 'login' })
+      } else {
+        ElMessage.error(message)
       }
     } else {
       ElMessage.error(message)

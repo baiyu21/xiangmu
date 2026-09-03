@@ -60,7 +60,8 @@ const router = createRouter({
         {
           path: 'ai-qa',
           name: 'ai-qa',
-          component: () => import('../views/AIQuestionAnswer/AIQuestionAnswer.vue'),
+          // 二期开放：一期隐藏入口，直链访问时重定向到项目管理
+          redirect: { name: 'projects' },
         },
       ],
     },
