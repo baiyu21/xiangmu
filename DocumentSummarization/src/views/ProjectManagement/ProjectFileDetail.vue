@@ -42,8 +42,8 @@ const selectedDoc = computed(() =>
   history.value.find((d) => d.id === selectedDocId.value) || null,
 )
 
-/** 注释接口使用 file-detail 中 records[].id */
-const commentRecordId = computed(() => selectedDoc.value?.id || '')
+/** 注释接口传 changeItemId（file-detail 的 records[].id，即 change_items 主键） */
+const commentItemId = computed(() => selectedDoc.value?.id || '')
 
 const fileName = computed(() => file.value?.path.split('/').pop() || fileId.value)
 
@@ -55,13 +55,14 @@ function resolveInitialDocId(docs: ChangeDoc[]): string | null {
   return sorted[0]?.id || null
 }
 
-async function loadComments(recordId: string) {
-  if (!recordId || !projectId.value || !fileId.value) return
+async function loadComments() {
+  const itemId = commentItemId.value
+  if (!itemId || !projectId.value || !fileId.value) return
   commentsLoading.value = true
   try {
-    const raw = await fetchRecordComments(recordId)
+    const raw = await fetchRecordComments(itemId)
     const list = normalizeRecordComments(raw)
-    fileMapStore.setDocComments(projectId.value, fileId.value, recordId, list)
+    fileMapStore.setDocComments(projectId.value, fileId.value, itemId, list)
   } catch {
     // 拦截器已 Toast
   } finally {
@@ -125,9 +126,9 @@ watch(
   { immediate: true },
 )
 
-watch(selectedDocId, (id) => {
+watch(selectedDocId, () => {
   commentInput.value = ''
-  if (id) void loadComments(id)
+  void loadComments()
 })
 
 function backToMap() {
@@ -153,7 +154,7 @@ function openRecord(docId: string) {
 }
 
 async function submitComment() {
-  if (!selectedDocId.value || !commentRecordId.value) {
+  if (!commentItemId.value) {
     ElMessage.warning('请先选择左侧某次修改')
     return
   }
@@ -166,10 +167,10 @@ async function submitComment() {
 
   commentSubmitting.value = true
   try {
-    await createRecordComment(commentRecordId.value, { content })
+    await createRecordComment(commentItemId.value, { content })
     commentInput.value = ''
     ElMessage.success('注释已发表')
-    await loadComments(commentRecordId.value)
+    await loadComments()
   } catch {
     // 拦截器已 Toast
   } finally {
