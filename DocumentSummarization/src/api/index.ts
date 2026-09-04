@@ -30,6 +30,7 @@ export {
   createUser,
   updateUser,
   toggleUser,
+  deleteUsersBatch,
   normalizeUserList,
   normalizeUserItem,
   roleLabel,

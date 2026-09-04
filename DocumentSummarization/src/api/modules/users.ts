@@ -145,3 +145,14 @@ export function updateUser(id: number | string, payload: UpdateUserPayload) {
 export function toggleUser(id: number | string) {
   return request.patch(`/v1/users/${id}/toggle`)
 }
+
+/** 批量删除用户（单删也走此接口，传一个 id） */
+export function deleteUsersBatch(userIds: Array<number | string>) {
+  const ids = userIds
+    .map((id) => (typeof id === 'number' ? id : Number(id)))
+    .filter((id) => Number.isFinite(id))
+  if (!ids.length) {
+    return Promise.reject(new Error('请选择要删除的用户'))
+  }
+  return request.delete('/v1/users/batch', { data: { user_ids: ids } })
+}
