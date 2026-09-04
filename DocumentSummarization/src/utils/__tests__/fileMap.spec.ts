@@ -3,8 +3,10 @@ import {
   buildModuleNodes,
   buildRepoNodes,
   changeCountOf,
+  changeTypeLabel,
   filterFiles,
   formatPath,
+  resolveChangeTypeCode,
   sortFiles,
   statsOf,
   type MappedFile,
@@ -97,5 +99,16 @@ describe('fileMap utils', () => {
     }
     expect(changeCountOf(file)).toBe(3)
     expect(statsOf([file])).toMatchObject({ files: 1, changes: 3, docs: 1, authors: 1 })
+  })
+
+  it('场景：变更类型编码规范化', () => {
+    expect(resolveChangeTypeCode('add')).toBe('add')
+    expect(resolveChangeTypeCode('新增')).toBe('add')
+    expect(resolveChangeTypeCode('MODIFY')).toBe('modify')
+    expect(resolveChangeTypeCode('修改')).toBe('modify')
+    expect(resolveChangeTypeCode('delete')).toBe('delete')
+    expect(resolveChangeTypeCode('删除')).toBe('delete')
+    expect(resolveChangeTypeCode('')).toBe('')
+    expect(changeTypeLabel('add')).toBe('新增')
   })
 })

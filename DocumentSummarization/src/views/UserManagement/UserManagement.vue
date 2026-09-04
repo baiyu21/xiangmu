@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { PageState } from '@/components'
 import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import {
@@ -8,6 +8,7 @@ import {
   createUser,
   updateUser,
   toggleUser,
+  deleteUsersBatch,
   normalizeUserList,
   roleLabel,
   type UserListItem,
@@ -19,6 +20,7 @@ const dialogOpen = ref(false)
 const editing = ref<UserFormData | null>(null)
 const submitting = ref(false)
 const togglingId = ref<number | null>(null)
+const deletingId = ref<number | null>(null)
 const status = ref<PageLoadStatus>('loading')
 const data = ref<UserListItem[]>([])
 
@@ -116,7 +118,7 @@ async function onSubmit(payload: UserFormData) {
 }
 
 async function toggleStatus(row: UserListItem) {
-  if (togglingId.value != null) return
+  if (togglingId.value != null || deletingId.value != null) return
   togglingId.value = row.id
   const nextLabel = row.status === '启用' ? '停用' : '启用'
   try {
@@ -130,6 +132,35 @@ async function toggleStatus(row: UserListItem) {
   }
 }
 
+async function removeUser(row: UserListItem) {
+  if (deletingId.value != null || togglingId.value != null) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除用户「${row.name}」（${row.username}）？删除后不可恢复。`,
+      '删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+      },
+    )
+  } catch {
+    return
+  }
+
+  deletingId.value = row.id
+  try {
+    await deleteUsersBatch([row.id])
+    ElMessage.success(`已删除 ${row.name}`)
+    await reload()
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    deletingId.value = null
+  }
+}
+
 onMounted(() => {
   void reload()
 })
@@ -139,7 +170,7 @@ onMounted(() => {
   <div class="page">
     <header class="page-header">
       <h1>用户管理</h1>
-      <p>查看系统用户列表，新建、编辑显示名，或切换启用/停用。</p>
+      <p>查看系统用户列表，新建、编辑、启用/停用或删除用户。</p>
     </header>
 
     <section class="card">
@@ -187,7 +218,7 @@ onMounted(() => {
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="180" fixed="right" align="center">
+            <el-table-column label="操作" width="220" fixed="right" align="center">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
                 <el-button
@@ -195,9 +226,20 @@ onMounted(() => {
                   :type="row.status === '启用' ? 'warning' : 'success'"
                   size="small"
                   :loading="togglingId === row.id"
+                  :disabled="deletingId === row.id"
                   @click="toggleStatus(row)"
                 >
                   {{ row.status === '启用' ? '停用' : '启用' }}
+                </el-button>
+                <el-button
+                  link
+                  type="danger"
+                  size="small"
+                  :loading="deletingId === row.id"
+                  :disabled="togglingId === row.id"
+                  @click="removeUser(row)"
+                >
+                  删除
                 </el-button>
               </template>
             </el-table-column>

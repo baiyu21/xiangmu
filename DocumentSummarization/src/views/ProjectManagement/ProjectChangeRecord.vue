@@ -12,7 +12,12 @@ import {
   normalizeChangeDocDetail,
   normalizeFileDetail,
   type ChangeDocDetail,
+  type ChangeDocItem,
 } from '@/api'
+import {
+  resolveChangeTypeCode,
+  type ChangeTypeFilter,
+} from '@/utils/fileMap'
 
 const route = useRoute()
 const router = useRouter()
@@ -43,6 +48,23 @@ const historyDoc = computed(() => {
 
 const status = ref<PageLoadStatus>('loading')
 const changeDoc = ref<ChangeDocDetail | null>(null)
+const typeFilter = ref<ChangeTypeFilter>('all')
+
+const typeFilterOptions: { value: ChangeTypeFilter; label: string }[] = [
+  { value: 'all', label: '全部类型' },
+  { value: 'add', label: '新增' },
+  { value: 'modify', label: '修改' },
+  { value: 'delete', label: '删除' },
+]
+
+const filteredItems = computed(() => {
+  const items = changeDoc.value?.items || []
+  if (typeFilter.value === 'all') return items
+  return items.filter((item: ChangeDocItem) => {
+    const code = resolveChangeTypeCode(item.typeCode) || resolveChangeTypeCode(item.type)
+    return code === typeFilter.value
+  })
+})
 
 const pageStatus = computed(() => {
   if (status.value === 'loading' || status.value === 'error') return status.value
@@ -99,6 +121,7 @@ async function loadRecord() {
 
   status.value = 'loading'
   changeDoc.value = null
+  typeFilter.value = 'all'
 
   try {
     await ensureFileContext()
@@ -200,9 +223,26 @@ function backToMap() {
 
         <hr />
 
-        <h2>变更条目（{{ changeDoc.items.length }}）</h2>
-        <div v-if="changeDoc.items.length" class="items">
-          <article v-for="item in changeDoc.items" :key="item.id" class="item-card">
+        <div class="section-hd">
+          <h2>
+            变更条目（{{ filteredItems.length
+            }}<template v-if="typeFilter !== 'all'">/{{ changeDoc.items.length }}</template>）
+          </h2>
+          <label class="type-filter">
+            <span>变更类型</span>
+            <select v-model="typeFilter" aria-label="按变更类型筛选">
+              <option
+                v-for="opt in typeFilterOptions"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <div v-if="filteredItems.length" class="items">
+          <article v-for="item in filteredItems" :key="item.id" class="item-card">
             <div class="item-hd">
               <span class="tag" :class="item.typeCode || 'modify'">{{ item.type }}</span>
               <span class="tag soft">{{ item.module }}</span>
@@ -213,7 +253,9 @@ function backToMap() {
             <pre v-if="item.codeSnippet" class="snippet">{{ item.codeSnippet }}</pre>
           </article>
         </div>
-        <p v-else class="muted">暂无变更条目</p>
+        <p v-else class="muted">
+          {{ changeDoc.items.length ? '当前类型下暂无变更条目' : '暂无变更条目' }}
+        </p>
 
         <hr />
 
@@ -280,9 +322,33 @@ function backToMap() {
   padding: 20px 22px;
 }
 .shell h2 {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 16px;
   color: #111827;
+}
+.section-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.type-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5563;
+}
+.type-filter select {
+  min-width: 108px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 12px;
 }
 .shell p {
   margin: 0 0 12px;

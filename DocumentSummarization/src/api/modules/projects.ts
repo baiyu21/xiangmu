@@ -1,5 +1,10 @@
 import request from '../request'
-import type { ChangeDoc, MappedFile } from '@/utils/fileMap'
+import {
+  changeTypeLabel,
+  resolveChangeTypeCode,
+  type ChangeDoc,
+  type MappedFile,
+} from '@/utils/fileMap'
 
 export interface CreateProjectPayload {
   repoUrl: string
@@ -215,7 +220,14 @@ function normalizeChangeDoc(raw: unknown): ChangeDoc | null {
       pickString(row.note, row.aiBrief, row.ai_brief, row.ai_summary, row.brief) || undefined,
     docId: docId || undefined,
     codeSnippet: pickString(row.codeSnippet, row.code_snippet, row.diff, row.patch) || undefined,
-    type: pickString(row.type, row.typeCode, row.type_code) || undefined,
+    type:
+      pickString(row.type) ||
+      changeTypeLabel(pickString(row.typeCode, row.type_code)) ||
+      undefined,
+    typeCode:
+      resolveChangeTypeCode(pickString(row.typeCode, row.type_code)) ||
+      resolveChangeTypeCode(pickString(row.type)) ||
+      undefined,
     clientComments: commentsRaw
       .map((c) => normalizeComment(c))
       .filter((c): c is NonNullable<typeof c> => c != null),
@@ -481,12 +493,19 @@ function normalizeChangeDocItem(raw: unknown): ChangeDocItem | null {
   const id = pickId(row.id)
   const file = pickString(row.file, row.path, row.file_path)
   if (id == null || !file) return null
+  const typeCode =
+    resolveChangeTypeCode(pickString(row.typeCode, row.type_code)) ||
+    resolveChangeTypeCode(pickString(row.type)) ||
+    undefined
   return {
     id,
     module: pickString(row.module, '未分类') || '未分类',
     file,
-    type: pickString(row.type, row.typeCode, row.type_code, '修改') || '修改',
-    typeCode: pickString(row.typeCode, row.type_code) || undefined,
+    type:
+      pickString(row.type) ||
+      changeTypeLabel(typeCode) ||
+      '修改',
+    typeCode: typeCode || undefined,
     scope: pickString(row.scope) || undefined,
     note: pickString(row.note, row.description) || undefined,
     codeSnippet: pickString(row.codeSnippet, row.code_snippet) || undefined,

@@ -7,7 +7,13 @@ import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
 import { fetchProjectFileDetail, normalizeFileDetail, fetchRecordComments, createRecordComment, normalizeRecordComments } from '@/api'
-import { changeCountOf, type ChangeDoc } from '@/utils/fileMap'
+import {
+  changeCountOf,
+  changeTypeLabel,
+  resolveChangeTypeCode,
+  type ChangeDoc,
+  type ChangeTypeFilter,
+} from '@/utils/fileMap'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,15 +33,28 @@ const project = computed(() => projectStore.getById(projectId.value))
 const file = computed(() => fileMapStore.getFile(projectId.value, fileId.value))
 
 const selectedDocId = ref<string | null>(null)
+const typeFilter = ref<ChangeTypeFilter>('all')
 const commentInput = ref('')
 const detailLoading = ref(false)
 const commentsLoading = ref(false)
 const commentSubmitting = ref(false)
 const pageStatus = ref<PageLoadStatus>('loading')
 
+const typeFilterOptions: { value: ChangeTypeFilter; label: string }[] = [
+  { value: 'all', label: '全部类型' },
+  { value: 'add', label: '新增' },
+  { value: 'modify', label: '修改' },
+  { value: 'delete', label: '删除' },
+]
+
 const history = computed(() => {
   if (!file.value) return [] as ChangeDoc[]
-  return [...file.value.docs].sort((a, b) => (a.at < b.at ? 1 : -1))
+  const sorted = [...file.value.docs].sort((a, b) => (a.at < b.at ? 1 : -1))
+  if (typeFilter.value === 'all') return sorted
+  return sorted.filter((d) => {
+    const code = d.typeCode || resolveChangeTypeCode(d.type)
+    return code === typeFilter.value
+  })
 })
 
 const selectedDoc = computed(() =>
@@ -131,6 +150,32 @@ watch(selectedDocId, () => {
   void loadComments()
 })
 
+watch(typeFilter, () => {
+  const list = history.value
+  if (!list.length) {
+    selectedDocId.value = null
+    return
+  }
+  if (!selectedDocId.value || !list.some((d) => d.id === selectedDocId.value)) {
+    selectedDocId.value = list[0]?.id || null
+  }
+})
+
+watch(
+  [projectId, fileId],
+  () => {
+    typeFilter.value = 'all'
+  },
+)
+
+function docTypeLabel(doc: ChangeDoc): string {
+  return doc.type || changeTypeLabel(doc.typeCode) || ''
+}
+
+function docTypeCode(doc: ChangeDoc): string {
+  return doc.typeCode || resolveChangeTypeCode(doc.type) || ''
+}
+
 function backToMap() {
   void router.push({ name: 'project-overview', params: { id: projectId.value } })
 }
@@ -220,11 +265,26 @@ async function submitComment() {
       <section class="shell">
         <div class="shell-hd">
           <strong>修改历史与对应文档</strong>
-          <span class="tag">修改人：{{ file?.authors.map((a) => '@' + a).join(' ') }}</span>
+          <div class="shell-hd-right">
+            <label class="type-filter">
+              <span>变更类型</span>
+              <select v-model="typeFilter" aria-label="按变更类型筛选">
+                <option
+                  v-for="opt in typeFilterOptions"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </option>
+              </select>
+            </label>
+            <span class="tag">修改人：{{ file?.authors.map((a) => '@' + a).join(' ') }}</span>
+          </div>
         </div>
 
         <div class="history-wrap">
           <div class="history-list">
+            <div v-if="!history.length" class="history-empty">当前类型下暂无修改记录</div>
             <button
               v-for="d in history"
               :key="d.id"
@@ -238,7 +298,16 @@ async function submitComment() {
                 <div class="author">@{{ d.author }}</div>
               </div>
               <div class="tl-main">
-                <div class="tl-title">{{ d.title }}</div>
+                <div class="tl-title">
+                  <span
+                    v-if="docTypeLabel(d)"
+                    class="type-chip"
+                    :class="docTypeCode(d) || 'modify'"
+                  >
+                    {{ docTypeLabel(d) }}
+                  </span>
+                  {{ d.title }}
+                </div>
                 <div class="tl-desc">{{ d.summary }}</div>
                 <span
                   v-if="(d.clientComments || []).length"
@@ -445,6 +514,28 @@ async function submitComment() {
   flex-wrap: wrap;
   align-items: center;
 }
+.shell-hd-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.type-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #4b5563;
+}
+.type-filter select {
+  min-width: 108px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 12px;
+}
 .tag {
   display: inline-flex;
   align-items: center;
@@ -453,6 +544,34 @@ async function submitComment() {
   font-size: 11px;
   background: #eef3f0;
   color: #4b5563;
+}
+.history-empty {
+  padding: 28px 16px;
+  font-size: 13px;
+  color: #9ca3af;
+  text-align: center;
+}
+.type-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.type-chip.add {
+  background: #ecfdf5;
+  color: #047857;
+}
+.type-chip.modify {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.type-chip.delete {
+  background: #fef2f2;
+  color: #b91c1c;
 }
 .tag.amber {
   background: #fff1df;

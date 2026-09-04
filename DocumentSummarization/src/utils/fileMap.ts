@@ -6,6 +6,9 @@ export interface ClientComment {
   at: string
 }
 
+export type ChangeTypeCode = 'add' | 'modify' | 'delete'
+export type ChangeTypeFilter = 'all' | ChangeTypeCode
+
 export interface ChangeDoc {
   id: string
   title: string
@@ -17,7 +20,33 @@ export interface ChangeDoc {
   /** 关联文档 id（file-detail 的 docId） */
   docId?: string
   codeSnippet?: string
+  /** 展示用中文类型 */
   type?: string
+  /** 变更编码：add / modify / delete */
+  typeCode?: ChangeTypeCode
+}
+
+const TYPE_LABEL: Record<ChangeTypeCode, string> = {
+  add: '新增',
+  modify: '修改',
+  delete: '删除',
+}
+
+/** 将接口 type / typeCode / 中文文案规范为 add|modify|delete */
+export function resolveChangeTypeCode(raw?: string | null): ChangeTypeCode | '' {
+  const v = (raw || '').trim().toLowerCase()
+  if (!v) return ''
+  if (v === 'add' || v === '新增' || v === '增加') return 'add'
+  if (v === 'delete' || v === '删除' || v === 'del' || v === 'remove') return 'delete'
+  if (v === 'modify' || v === '修改' || v === 'update' || v === 'edit' || v === 'change') {
+    return 'modify'
+  }
+  return ''
+}
+
+export function changeTypeLabel(code?: string | null): string {
+  const resolved = resolveChangeTypeCode(code)
+  return resolved ? TYPE_LABEL[resolved] : ''
 }
 
 export interface MappedFile {
