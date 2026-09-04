@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { PageState } from '@/components'
+import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
+import {
+  fetchChangeDoc,
+  fetchProjectFileDetail,
+  normalizeChangeDocDetail,
+  normalizeFileDetail,
+  type ChangeDocDetail,
+} from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,22 +20,130 @@ const projectStore = useProjectStore()
 const fileMapStore = useFileMapStore()
 
 const projectId = computed(() => String(route.params.id || ''))
-const fileId = computed(() => String(route.params.fileId || ''))
+const fileId = computed(() => {
+  const raw = String(route.params.fileId || '')
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+})
 const docId = computed(() => String(route.params.docId || ''))
 
 const project = computed(() => projectStore.getById(projectId.value))
 const file = computed(() => fileMapStore.getFile(projectId.value, fileId.value))
-const doc = computed(() => file.value?.docs.find((d) => d.id === docId.value))
+const historyDoc = computed(() => {
+  const list = file.value?.docs || []
+  return (
+    list.find((d) => d.id === docId.value) ||
+    list.find((d) => d.docId === docId.value) ||
+    undefined
+  )
+})
+
+const status = ref<PageLoadStatus>('loading')
+const changeDoc = ref<ChangeDocDetail | null>(null)
 
 const pageStatus = computed(() => {
-  if (!project.value || !file.value || !doc.value) return 'error' as const
-  return 'ready' as const
+  if (status.value === 'loading' || status.value === 'error') return status.value
+  return changeDoc.value ? 'ready' : 'error'
 })
+
+const pageTitle = computed(() => {
+  if (!changeDoc.value) return '修改文档正文'
+  const title = changeDoc.value.requirementDesc || changeDoc.value.reason || changeDoc.value.id
+  return `${changeDoc.value.date} · ${title}`
+})
+
+function resolveDate(): string {
+  const fromQuery = typeof route.query.date === 'string' ? route.query.date.trim() : ''
+  if (fromQuery) return fromQuery
+  const fromHistory = historyDoc.value?.at?.trim() || ''
+  // at 可能是 "2026-09-02" 或带时间，取日期部分
+  if (fromHistory) return fromHistory.slice(0, 10)
+  return ''
+}
+
+async function ensureFileContext() {
+  const pid = projectId.value
+  const fid = fileId.value
+  if (!pid || !fid || file.value?.docs?.length) return
+  try {
+    const path = file.value?.path || fid
+    const raw = await fetchProjectFileDetail(pid, { file: path })
+    const detail = normalizeFileDetail(raw, pid)
+    if (detail) {
+      fileMapStore.upsertFile(detail)
+      if (!projectStore.getById(pid)) {
+        projectStore.upsertProject({
+          id: pid,
+          name: pid,
+          url: '',
+          branch: 'main',
+          mappedFiles: 1,
+          changeCount: detail.changeCount || detail.docs.length,
+        })
+      }
+    }
+  } catch {
+    // 正文接口不依赖文件上下文也能展示
+  }
+}
+
+async function loadRecord() {
+  const pid = projectId.value
+  if (!pid) {
+    status.value = 'error'
+    return
+  }
+
+  status.value = 'loading'
+  changeDoc.value = null
+
+  try {
+    await ensureFileContext()
+    const date = resolveDate()
+    if (!date) {
+      ElMessage.warning('缺少变更日期，无法加载修改文档')
+      status.value = 'error'
+      return
+    }
+
+    const raw = await fetchChangeDoc(pid, { date })
+    const detail = normalizeChangeDocDetail(raw)
+    if (!detail) {
+      status.value = 'error'
+      return
+    }
+    changeDoc.value = detail
+    if (!projectStore.getById(pid)) {
+      projectStore.upsertProject({
+        id: pid,
+        name: project.value?.name || pid,
+        url: project.value?.url || '',
+        branch: project.value?.branch || 'main',
+        mappedFiles: project.value?.mappedFiles || 0,
+        changeCount: project.value?.changeCount || detail.changeCount,
+      })
+    }
+    status.value = 'ready'
+  } catch {
+    status.value = 'error'
+  }
+}
+
+watch(
+  [projectId, fileId, docId, () => route.query.date],
+  () => {
+    void loadRecord()
+  },
+  { immediate: true },
+)
 
 function backToFile() {
   void router.push({
     name: 'project-file',
-    params: { id: projectId.value, fileId: fileId.value },
+    params: { id: projectId.value, fileId: encodeURIComponent(fileId.value) },
   })
 }
 
@@ -36,37 +152,24 @@ function backToMap() {
 }
 
 function downloadMarkdown() {
-  if (!doc.value || !file.value) return
-  const md = [
-    `# ${doc.value.id} · ${doc.value.title}`,
-    '',
-    `- **关联文件**: \`${file.value.path}\``,
-    `- **修改人**: @${doc.value.author}`,
-    `- **时间**: ${doc.value.at}`,
-    `- **摘要**: ${doc.value.summary}`,
-    '',
-    '## AI 通俗说明',
-    '',
-    doc.value.aiBrief || '_（尚未生成）_',
-    '',
-    '## 客户注释',
-    '',
-    ...(doc.value.clientComments || []).map(
-      (c) => `- **${c.author}**（${c.at}）：${c.content}`,
-    ),
-    (doc.value.clientComments || []).length ? '' : '_暂无客户注释_',
-    '',
-    '---',
-    '',
-    '_正式版可在此渲染完整 Markdown / diff。_',
-    '',
-  ].join('\n')
+  if (!changeDoc.value) return
+  const content =
+    changeDoc.value.rawContent ||
+    [
+      `# ${changeDoc.value.date} · ${changeDoc.value.requirementDesc || changeDoc.value.reason}`,
+      '',
+      `- **修改人**: @${changeDoc.value.author}`,
+      `- **关联需求**: ${changeDoc.value.relatedReq}`,
+      `- **影响**: ${changeDoc.value.impact}`,
+      '',
+      changeDoc.value.reason,
+    ].join('\n')
 
-  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `${doc.value.id}.md`
+  a.download = changeDoc.value.sourceFile || `${changeDoc.value.date}.md`
   a.click()
   URL.revokeObjectURL(url)
   ElMessage.success('已开始下载')
@@ -86,12 +189,12 @@ function downloadMarkdown() {
     <PageState
       :status="pageStatus"
       error-text="未找到该修改文档"
-      @retry="backToFile"
+      @retry="loadRecord"
     >
       <header class="page-header">
         <div>
-          <h1>{{ doc?.id }} · {{ doc?.title }}</h1>
-          <p>从文档详情中某次修改进入的附属正文页。</p>
+          <h1>{{ pageTitle }}</h1>
+          <p v-if="changeDoc?.sourceFile">来源文件：{{ changeDoc.sourceFile }}</p>
         </div>
         <div class="header-actions">
           <button type="button" class="btn-ghost" @click="backToFile">返回文档详情</button>
@@ -101,34 +204,49 @@ function downloadMarkdown() {
         </div>
       </header>
 
-      <section class="shell">
+      <section v-if="changeDoc" class="shell">
         <p><span class="tag teal">修改文档正文</span></p>
-        <p>
-          <strong>关联文件</strong><br />
-          <span class="mono">{{ file?.path }}</span>
+
+        <div class="meta-grid">
+          <p><strong>修改人</strong><br />@{{ changeDoc.author || '—' }}</p>
+          <p><strong>日期</strong><br />{{ changeDoc.date }}</p>
+          <p><strong>变更条目</strong><br />{{ changeDoc.changeCount }}</p>
+          <p v-if="file?.path">
+            <strong>来自文件</strong><br />
+            <span class="mono">{{ file.path }}</span>
+          </p>
+        </div>
+
+        <p v-if="changeDoc.relatedReq"><strong>关联需求</strong><br />{{ changeDoc.relatedReq }}</p>
+        <p v-if="changeDoc.requirementDesc">
+          <strong>需求描述</strong><br />{{ changeDoc.requirementDesc }}
         </p>
-        <p><strong>修改人</strong> @{{ doc?.author }}</p>
-        <p><strong>时间</strong> {{ doc?.at }}</p>
-        <p><strong>摘要</strong> {{ doc?.summary }}</p>
+        <p v-if="changeDoc.reason"><strong>变更原因</strong><br />{{ changeDoc.reason }}</p>
+        <p v-if="changeDoc.impact"><strong>影响范围</strong><br />{{ changeDoc.impact }}</p>
+        <p v-if="changeDoc.notice"><strong>注意事项</strong><br />{{ changeDoc.notice }}</p>
 
         <hr />
 
-        <h2>AI 通俗说明</h2>
-        <p v-if="doc?.aiBrief" class="body">{{ doc.aiBrief }}</p>
-        <p v-else class="muted">（AI 总结尚未就绪）</p>
-
-        <h2>客户注释</h2>
-        <ul v-if="(doc?.clientComments || []).length" class="comments">
-          <li v-for="c in doc?.clientComments" :key="c.id">
-            <strong>{{ c.author }}</strong>
-            <span class="mono">{{ c.at }}</span>
-            <div>{{ c.content }}</div>
-          </li>
-        </ul>
-        <p v-else class="muted">暂无客户注释</p>
+        <h2>变更条目（{{ changeDoc.items.length }}）</h2>
+        <div v-if="changeDoc.items.length" class="items">
+          <article v-for="item in changeDoc.items" :key="item.id" class="item-card">
+            <div class="item-hd">
+              <span class="tag" :class="item.typeCode || 'modify'">{{ item.type }}</span>
+              <span class="tag soft">{{ item.module }}</span>
+              <span class="mono path">{{ item.file }}</span>
+            </div>
+            <p v-if="item.scope" class="item-scope">范围：{{ item.scope }}</p>
+            <p v-if="item.note" class="item-note">{{ item.note }}</p>
+            <pre v-if="item.codeSnippet" class="snippet">{{ item.codeSnippet }}</pre>
+          </article>
+        </div>
+        <p v-else class="muted">暂无变更条目</p>
 
         <hr />
-        <p class="muted tip">正式版可在此渲染完整 Markdown / diff。</p>
+
+        <h2>完整正文</h2>
+        <pre v-if="changeDoc.rawContent" class="raw">{{ changeDoc.rawContent }}</pre>
+        <p v-else class="muted">暂无正文内容</p>
       </section>
     </PageState>
   </div>
@@ -164,29 +282,150 @@ function downloadMarkdown() {
   align-items: flex-start;
   gap: 16px;
   margin-bottom: 16px;
-  flex-wrap: wrap;
 }
 .page-header h1 {
   margin: 0 0 6px;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: #111827;
+  line-height: 1.35;
 }
 .page-header p {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   color: #6b7280;
 }
 .header-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
-.btn-ghost,
-.btn-primary {
+.shell {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px 22px;
+}
+.shell h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #111827;
+}
+.shell p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.6;
+}
+.shell hr {
+  border: none;
+  border-top: 1px solid #f3f4f6;
+  margin: 18px 0;
+}
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px 16px;
+  margin-bottom: 8px;
+}
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+.tag.teal {
+  background: #ecfdf5;
+  color: #0f766e;
+}
+.tag.soft {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.tag.add {
+  background: #ecfdf5;
+  color: #047857;
+}
+.tag.modify {
+  background: #fff7ed;
+  color: #c2410c;
+}
+.tag.delete {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #6b7280;
+  word-break: break-all;
+}
+.muted {
+  color: #9ca3af;
+}
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.item-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fafafa;
+}
+.item-hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.item-hd .path {
+  flex: 1 1 180px;
+}
+.item-scope,
+.item-note {
+  margin: 0 0 8px !important;
+  font-size: 13px !important;
+  color: #4b5563 !important;
+}
+.snippet,
+.raw {
+  margin: 0;
+  padding: 12px 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+}
+.raw {
+  max-height: 640px;
+  background: #111827;
+}
+.btn-primary,
+.btn-ghost {
   padding: 9px 14px;
   border-radius: 10px;
   font-size: 14px;
   cursor: pointer;
+}
+.btn-primary {
+  background: #0f766e;
+  color: #fff;
+  border: none;
+  font-weight: 500;
+}
+.btn-primary:hover {
+  background: #0d9488;
 }
 .btn-ghost {
   background: #fff;
@@ -196,73 +435,6 @@ function downloadMarkdown() {
 .btn-ghost:hover {
   border-color: #0f766e;
   color: #0f766e;
-}
-.btn-primary {
-  background: #0f766e;
-  color: #fff;
-  border: none;
-}
-.btn-primary:hover {
-  background: #0d9488;
-}
-.shell {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  padding: 22px;
-  line-height: 1.6;
-  color: #374151;
-  font-size: 14px;
-}
-.shell p {
-  margin: 0 0 12px;
-}
-.shell h2 {
-  margin: 8px 0 10px;
-  font-size: 16px;
-  color: #111827;
-}
-.shell hr {
-  border: none;
-  border-top: 1px solid #e5e7eb;
-  margin: 18px 0;
-}
-.tag {
-  display: inline-flex;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  background: #eef3f0;
-  color: #4b5563;
-}
-.tag.teal {
-  background: #ecfdf5;
-  color: #0f766e;
-}
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: #6b7280;
-}
-.body {
-  color: #1f2937;
-}
-.muted {
-  color: #9ca3af;
-}
-.tip {
-  font-size: 13px;
-  margin-bottom: 0 !important;
-}
-.comments {
-  margin: 0;
-  padding-left: 18px;
-}
-.comments li {
-  margin-bottom: 10px;
-}
-.comments .mono {
-  margin-left: 8px;
 }
 
 @media (max-width: 640px) {
@@ -274,16 +446,11 @@ function downloadMarkdown() {
 
   .header-actions {
     display: flex;
-    gap: 8px;
   }
 
   .header-actions .btn-primary,
   .header-actions .btn-ghost {
     flex: 1;
-  }
-
-  .shell {
-    padding: 16px;
   }
 }
 </style>

@@ -3,8 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { PageState } from '@/components'
+import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
+import { fetchProjectFileDetail, normalizeFileDetail, fetchRecordComments, createRecordComment, normalizeRecordComments } from '@/api'
 import { changeCountOf, type ChangeDoc } from '@/utils/fileMap'
 
 const route = useRoute()
@@ -13,12 +15,23 @@ const projectStore = useProjectStore()
 const fileMapStore = useFileMapStore()
 
 const projectId = computed(() => String(route.params.id || ''))
-const fileId = computed(() => String(route.params.fileId || ''))
+const fileId = computed(() => {
+  const raw = String(route.params.fileId || '')
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+})
 const project = computed(() => projectStore.getById(projectId.value))
 const file = computed(() => fileMapStore.getFile(projectId.value, fileId.value))
 
 const selectedDocId = ref<string | null>(null)
 const commentInput = ref('')
+const detailLoading = ref(false)
+const commentsLoading = ref(false)
+const commentSubmitting = ref(false)
+const pageStatus = ref<PageLoadStatus>('loading')
 
 const history = computed(() => {
   if (!file.value) return [] as ChangeDoc[]
@@ -29,11 +42,8 @@ const selectedDoc = computed(() =>
   history.value.find((d) => d.id === selectedDocId.value) || null,
 )
 
-const pageStatus = computed(() => {
-  if (!project.value) return 'error' as const
-  if (!file.value) return 'error' as const
-  return 'ready' as const
-})
+/** 注释接口使用 file-detail 中 records[].id */
+const commentRecordId = computed(() => selectedDoc.value?.id || '')
 
 const fileName = computed(() => file.value?.path.split('/').pop() || fileId.value)
 
@@ -45,14 +55,57 @@ function resolveInitialDocId(docs: ChangeDoc[]): string | null {
   return sorted[0]?.id || null
 }
 
-watch(
-  file,
-  (f) => {
-    selectedDocId.value = f ? resolveInitialDocId(f.docs) : null
-    commentInput.value = ''
-  },
-  { immediate: true },
-)
+async function loadComments(recordId: string) {
+  if (!recordId || !projectId.value || !fileId.value) return
+  commentsLoading.value = true
+  try {
+    const raw = await fetchRecordComments(recordId)
+    const list = normalizeRecordComments(raw)
+    fileMapStore.setDocComments(projectId.value, fileId.value, recordId, list)
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
+async function loadFileDetail() {
+  const pid = projectId.value
+  const fid = fileId.value
+  if (!pid || !fid) {
+    pageStatus.value = 'error'
+    return
+  }
+
+  detailLoading.value = true
+  pageStatus.value = 'loading'
+  try {
+    const path = file.value?.path || fid
+    const raw = await fetchProjectFileDetail(pid, { file: path })
+    const detail = normalizeFileDetail(raw, pid)
+    if (detail) {
+      fileMapStore.upsertFile(detail)
+      if (!projectStore.getById(pid)) {
+        projectStore.upsertProject({
+          id: pid,
+          name: pid,
+          url: '',
+          branch: 'main',
+          mappedFiles: 1,
+          changeCount: changeCountOf(detail),
+        })
+      }
+      pageStatus.value = 'ready'
+      selectedDocId.value = resolveInitialDocId(detail.docs)
+    } else {
+      pageStatus.value = file.value ? 'ready' : 'error'
+    }
+  } catch {
+    pageStatus.value = project.value && file.value ? 'ready' : 'error'
+  } finally {
+    detailLoading.value = false
+  }
+}
 
 watch(
   () => route.query.doc,
@@ -64,6 +117,19 @@ watch(
   },
 )
 
+watch(
+  [projectId, fileId],
+  () => {
+    void loadFileDetail()
+  },
+  { immediate: true },
+)
+
+watch(selectedDocId, (id) => {
+  commentInput.value = ''
+  if (id) void loadComments(id)
+})
+
 function backToMap() {
   void router.push({ name: 'project-overview', params: { id: projectId.value } })
 }
@@ -73,32 +139,41 @@ function backToList() {
 }
 
 function openRecord(docId: string) {
+  const doc = file.value?.docs.find((d) => d.id === docId)
+  const date = (doc?.at || '').slice(0, 10)
   void router.push({
     name: 'project-record',
     params: {
       id: projectId.value,
-      fileId: fileId.value,
-      docId,
+      fileId: encodeURIComponent(fileId.value),
+      docId: doc?.docId || docId,
     },
+    query: date ? { date } : undefined,
   })
 }
 
-function submitComment() {
-  if (!selectedDocId.value) {
+async function submitComment() {
+  if (!selectedDocId.value || !commentRecordId.value) {
     ElMessage.warning('请先选择左侧某次修改')
     return
   }
+  const content = commentInput.value.trim()
+  if (!content) {
+    ElMessage.warning('请输入注释内容')
+    return
+  }
+  if (commentSubmitting.value) return
+
+  commentSubmitting.value = true
   try {
-    fileMapStore.addComment(
-      projectId.value,
-      fileId.value,
-      selectedDocId.value,
-      commentInput.value,
-    )
+    await createRecordComment(commentRecordId.value, { content })
     commentInput.value = ''
     ElMessage.success('注释已发表')
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '发表失败')
+    await loadComments(commentRecordId.value)
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    commentSubmitting.value = false
   }
 }
 </script>
@@ -116,7 +191,7 @@ function submitComment() {
     <PageState
       :status="pageStatus"
       error-text="未找到该文件或项目"
-      @retry="backToMap"
+      @retry="loadFileDetail"
     >
       <header class="page-header">
         <div>
@@ -128,8 +203,14 @@ function submitComment() {
 
       <div class="stats">
         <div class="stat"><i>修改次数</i><b>{{ file ? changeCountOf(file) : 0 }}</b></div>
-        <div class="stat"><i>修改人数</i><b>{{ file?.authors.length || 0 }}</b></div>
-        <div class="stat"><i>关联文档</i><b>{{ file?.docs.length || 0 }}</b></div>
+        <div class="stat">
+          <i>修改人数</i>
+          <b>{{ file?.authors.length || file?.authorCount || 0 }}</b>
+        </div>
+        <div class="stat">
+          <i>关联文档</i>
+          <b>{{ file?.documentCount || file?.docs.length || 0 }}</b>
+        </div>
         <div class="stat">
           <i>所属模块</i><b class="mod">{{ file?.module }}</b>
         </div>
@@ -192,7 +273,7 @@ function submitComment() {
                 </div>
               </div>
 
-              <div class="brief-comments">
+              <div class="brief-comments" v-loading="commentsLoading">
                 <div class="brief-comments-hd">
                   <div>
                     <strong>客户注释</strong>
@@ -209,13 +290,13 @@ function submitComment() {
                     class="client-note"
                   >
                     <div class="note-hd">
-                      <span class="note-author">{{ n.author }} · 客户</span>
+                      <span class="note-author">{{ n.author }} · {{ n.role === 'customer' ? '客户' : n.role }}</span>
                       <span class="mono">{{ n.at }}</span>
                     </div>
                     <div class="note-body">{{ n.content }}</div>
                   </div>
                   <div
-                    v-if="!(selectedDoc.clientComments || []).length"
+                    v-if="!commentsLoading && !(selectedDoc.clientComments || []).length"
                     class="comment-empty"
                   >
                     暂无客户注释，客户可在此留下对本次修改的想法。
@@ -226,11 +307,17 @@ function submitComment() {
                     v-model="commentInput"
                     placeholder="客户可在此写下对本次修改的想法、疑问或改动建议…"
                     rows="3"
+                    :disabled="commentSubmitting"
                   ></textarea>
                   <div class="form-foot">
                     <small>以当前登录身份发表。</small>
-                    <button type="button" class="btn-primary sm" @click="submitComment">
-                      发表注释
+                    <button
+                      type="button"
+                      class="btn-primary sm"
+                      :disabled="commentSubmitting"
+                      @click="submitComment"
+                    >
+                      {{ commentSubmitting ? '发表中…' : '发表注释' }}
                     </button>
                   </div>
                 </div>

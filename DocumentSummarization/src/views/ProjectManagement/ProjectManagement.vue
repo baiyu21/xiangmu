@@ -6,7 +6,17 @@ import { PageState, ProjectFormModal } from '@/components'
 import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore, type Project } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
-import { fetchProjects, createProject, syncProject, normalizeProjectList, normalizeProjectItem, getGithubToken, normalizeGithubToken } from '@/api'
+import {
+  fetchProjects,
+  createProject,
+  syncProject,
+  normalizeProjectList,
+  normalizeProjectItem,
+  getGithubToken,
+  normalizeGithubToken,
+  isMaskedGithubToken,
+  hasGithubTokenConfigured,
+} from '@/api'
 
 const router = useRouter()
 const projectStore = useProjectStore()
@@ -81,21 +91,32 @@ function goOverview(id: string) {
   void router.push({ name: 'project-overview', params: { id } })
 }
 
+/**
+ * 同步前先从后端取已保存的 Token，再放入 sync body：
+ * 1) GET /v1/auth/user/token → data.token_preview / has_token
+ * 2) POST /v1/projects/{id}/sync { github_token }
+ */
 async function resolveGithubToken(): Promise<string | null> {
   try {
     const raw = await getGithubToken()
-    const token = normalizeGithubToken(raw)
-    if (!token) {
+    if (!hasGithubTokenConfigured(raw)) {
       ElMessage.warning('请先在个人中心配置 GitHub Token')
       return null
     }
-    // 若后端返回掩码（含 *），无法用于同步
-    if (token.includes('*')) {
-      ElMessage.warning('当前 Token 为掩码，请在个人中心重新保存完整 GitHub Token 后再同步')
+    const token = normalizeGithubToken(raw)
+    if (!token) {
+      ElMessage.warning('已配置 Token 但未返回可用值，请重新保存后再同步')
+      return null
+    }
+    if (isMaskedGithubToken(token)) {
+      ElMessage.warning(
+        '获取到的 Token 为掩码，无法用于同步。请在个人中心重新保存一次完整 Token 后再试',
+      )
       return null
     }
     return token
   } catch {
+    // 拦截器已 Toast
     return null
   }
 }
@@ -104,6 +125,7 @@ async function syncOne(project: Project) {
   if (isBusy.value) return
   syncingId.value = project.id
   try {
+    // 每次同步都先取最新 Token，再带 body 调同步接口
     const token = await resolveGithubToken()
     if (!token) return
     await syncProject(project.id, { github_token: token })
@@ -120,6 +142,7 @@ async function syncAll() {
   if (isBusy.value || rows.value.length === 0) return
   syncingAll.value = true
   try {
+    // 全部同步：先取一次 Token，再逐个项目同步
     const token = await resolveGithubToken()
     if (!token) return
 

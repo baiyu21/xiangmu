@@ -5,12 +5,20 @@ import { PageState } from '@/components'
 import type { PageLoadStatus } from '@/utils/useMockPageLoad'
 import { useProjectStore } from '@/stores/project'
 import { useFileMapStore } from '@/stores/fileMap'
-import { fetchProject, normalizeProjectDetail } from '@/api'
+import {
+  fetchProject,
+  fetchProjectFiles,
+  fetchProjectFileDetail,
+  normalizeProjectDetail,
+  normalizeProjectFileList,
+  normalizeFileDetail,
+} from '@/api'
 import {
   changeCountOf,
   filterFiles,
   formatPath,
   sortFiles,
+  statsOf,
   type ChangeDoc,
   type SortKey,
 } from '@/utils/fileMap'
@@ -24,26 +32,16 @@ const projectId = computed(() => String(route.params.id || ''))
 const project = computed(() => projectStore.getById(projectId.value))
 
 const status = ref<PageLoadStatus>('loading')
+const historyLoading = ref(false)
+let historyReqSeq = 0
+/** 进入页批量选中首文件时，避免与显式拉历史重复 */
+let skipHistoryWatch = false
 const query = ref('')
 const sort = ref<SortKey>('count')
 const selectedFileId = ref<string | null>(null)
-/** 详情接口返回的统计（优先于本地回算） */
-const apiStats = ref<{ files: number; changes: number; authors: number; docs: number } | null>(
-  null,
-)
 
 const projectFiles = computed(() => fileMapStore.filesOf(projectId.value))
-const computedStats = computed(() => fileMapStore.projectStats(projectId.value))
-const stats = computed(() => {
-  if (!apiStats.value) return computedStats.value
-  // 有文件列表时，作者数用回算更准；其余优先接口
-  return {
-    files: apiStats.value.files || computedStats.value.files,
-    changes: apiStats.value.changes || computedStats.value.changes,
-    authors: computedStats.value.authors || apiStats.value.authors,
-    docs: apiStats.value.docs || computedStats.value.docs,
-  }
-})
+const stats = computed(() => statsOf(projectFiles.value))
 
 const tableRows = computed(() =>
   sortFiles(filterFiles(projectFiles.value, query.value, 'all', 'module'), sort.value),
@@ -64,6 +62,28 @@ const pageStatus = computed(() => {
   return project.value ? 'ready' : 'error'
 })
 
+function encodeFileId(fileId: string) {
+  return encodeURIComponent(fileId)
+}
+
+async function loadFileHistory(filePath: string) {
+  if (!projectId.value || !filePath) return
+  const seq = ++historyReqSeq
+  historyLoading.value = true
+  try {
+    const raw = await fetchProjectFileDetail(projectId.value, { file: filePath })
+    if (seq !== historyReqSeq) return
+    const detail = normalizeFileDetail(raw, projectId.value)
+    if (detail) {
+      fileMapStore.upsertFile(detail)
+    }
+  } catch {
+    // 拦截器已 Toast
+  } finally {
+    if (seq === historyReqSeq) historyLoading.value = false
+  }
+}
+
 async function loadDetail() {
   const id = projectId.value
   if (!id) {
@@ -72,33 +92,52 @@ async function loadDetail() {
   }
 
   status.value = 'loading'
-  apiStats.value = null
   try {
-    const raw = await fetchProject(id)
-    const detail = normalizeProjectDetail(raw, id)
-    if (!detail) {
-      status.value = 'error'
-      return
+    // 项目基础信息（可选，失败仍可用列表缓存）
+    try {
+      const rawProject = await fetchProject(id)
+      const detail = normalizeProjectDetail(rawProject, id)
+      if (detail) projectStore.upsertProject(detail)
+    } catch {
+      // 忽略；下面用缓存或仅文件列表
     }
-    projectStore.upsertProject(detail)
-    fileMapStore.setProjectFiles(id, detail.files)
-    apiStats.value = detail.stats || {
-      files: detail.mappedFiles,
-      changes: detail.changeCount,
-      authors: 0,
-      docs: detail.mappedFiles,
+
+    const rawFiles = await fetchProjectFiles(id)
+    const files = normalizeProjectFileList(rawFiles, id)
+
+    skipHistoryWatch = true
+    fileMapStore.setProjectFiles(id, files)
+
+    if (!projectStore.getById(id)) {
+      projectStore.upsertProject({
+        id,
+        name: id,
+        url: '',
+        branch: 'main',
+        mappedFiles: files.length,
+        changeCount: files.reduce((sum, f) => sum + changeCountOf(f), 0),
+      })
+    } else {
+      const p = projectStore.getById(id)!
+      projectStore.upsertProject({
+        ...p,
+        mappedFiles: files.length,
+        changeCount: files.reduce((sum, f) => sum + changeCountOf(f), 0),
+      })
     }
+
+    // 进入页后默认选中第一个文件，并立即查询修改历史
+    const first = files[0]
+    selectedFileId.value = first?.id ?? null
     status.value = 'ready'
+    if (first?.path) {
+      await loadFileHistory(first.path)
+    }
+    skipHistoryWatch = false
   } catch {
-    // 详情失败时：若列表页已有项目缓存，仍可展示壳 + 空文件
+    skipHistoryWatch = false
     if (projectStore.getById(id)) {
       fileMapStore.setProjectFiles(id, [])
-      apiStats.value = {
-        files: projectStore.getById(id)?.mappedFiles || 0,
-        changes: projectStore.getById(id)?.changeCount || 0,
-        authors: 0,
-        docs: projectStore.getById(id)?.stats?.docs || 0,
-      }
       status.value = 'ready'
     } else {
       status.value = 'error'
@@ -128,6 +167,16 @@ watch(
   { immediate: true },
 )
 
+watch(
+  selectedFileId,
+  (id) => {
+    if (skipHistoryWatch || !id) return
+    const file = fileMapStore.getFile(projectId.value, id)
+    if (!file?.path) return
+    void loadFileHistory(file.path)
+  },
+)
+
 function backToList() {
   void router.push({ name: 'projects' })
 }
@@ -136,18 +185,11 @@ function selectFile(fileId: string) {
   selectedFileId.value = fileId
 }
 
-function openFileDetail(fileId: string) {
-  void router.push({
-    name: 'project-file',
-    params: { id: projectId.value, fileId },
-  })
-}
-
 function openDocDetail(docId: string) {
   if (!selectedFileId.value) return
   void router.push({
     name: 'project-file',
-    params: { id: projectId.value, fileId: selectedFileId.value },
+    params: { id: projectId.value, fileId: encodeFileId(selectedFileId.value) },
     query: { doc: docId },
   })
 }
@@ -213,7 +255,6 @@ function openDocDetail(docId: string) {
                   <th>文件</th>
                   <th>修改</th>
                   <th>最近</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -236,15 +277,6 @@ function openDocDetail(docId: string) {
                     <div class="mono">{{ f.lastAt }}</div>
                     <div class="sub">@{{ f.lastAuthor }}</div>
                   </td>
-                  <td>
-                    <button
-                      type="button"
-                      class="btn-sm"
-                      @click.stop="openFileDetail(f.id)"
-                    >
-                      详情
-                    </button>
-                  </td>
                 </tr>
               </tbody>
             </table>
@@ -262,7 +294,7 @@ function openDocDetail(docId: string) {
             <span v-if="selectedFile" class="tag teal">{{ briefHistory.length }} 次</span>
           </div>
 
-          <div v-if="selectedFile" class="history-bd">
+          <div v-if="selectedFile" class="history-bd" v-loading="historyLoading">
             <p v-if="selectedFile.aiBrief" class="file-brief">{{ selectedFile.aiBrief }}</p>
 
             <button
@@ -292,7 +324,9 @@ function openDocDetail(docId: string) {
               </div>
             </button>
 
-            <div v-if="!briefHistory.length" class="empty">该文件暂无修改记录</div>
+            <div v-if="!historyLoading && !briefHistory.length" class="empty">
+              该文件暂无修改记录
+            </div>
           </div>
           <div v-else class="empty">请在左侧选择一个文件</div>
         </aside>

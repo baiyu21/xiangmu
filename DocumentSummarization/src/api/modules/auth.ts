@@ -152,17 +152,48 @@ export interface UpdateGithubTokenPayload {
   github_token: string
 }
 
-/** 从 GET/PUT token 响应解析 GitHub Token 明文或掩码 */
+/** 从 GET/PUT token 响应解析 GitHub Token 明文或预览字段 */
 export function normalizeGithubToken(raw: unknown): string {
+  if (typeof raw === 'string' && raw.trim()) return raw.trim()
+
   const root = asRecord(raw) || {}
   const data = asRecord(root.data) || root
+  const user = asRecord(data.user) || asRecord(root.user)
+
   return pickString(
+    data.token_preview,
+    data.tokenPreview,
     data.github_token,
     data.githubToken,
+    data.access_token,
+    data.accessToken,
     data.token,
+    user?.github_token,
+    user?.githubToken,
+    root.token_preview,
+    root.tokenPreview,
     root.github_token,
     root.githubToken,
+    root.token,
   )
+}
+
+/** 是否已配置 Token（兼容 has_token / 有预览值） */
+export function hasGithubTokenConfigured(raw: unknown): boolean {
+  const root = asRecord(raw) || {}
+  const data = asRecord(root.data) || root
+  if (typeof data.has_token === 'boolean') return data.has_token
+  if (typeof data.hasToken === 'boolean') return data.hasToken
+  return Boolean(normalizeGithubToken(raw))
+}
+
+/** 是否为掩码展示（不可用于同步请求） */
+export function isMaskedGithubToken(token: string): boolean {
+  const t = token.trim()
+  if (!t) return true
+  // 典型掩码：含 * 或 •，且不是正常 pat 明文
+  if (/[*•●]+/.test(t)) return true
+  return false
 }
 
 export function getGithubToken() {

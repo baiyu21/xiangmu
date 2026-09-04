@@ -80,4 +80,22 @@ describe('fileMap utils', () => {
       name: 'List.vue',
     })
   })
+
+  it('场景：列表计数优先于 docs.length', () => {
+    const file: MappedFile = {
+      id: 'c',
+      projectId: 'p',
+      module: '源码',
+      path: 'src/a.ts',
+      authors: [],
+      lastAt: '2026-09-02',
+      lastAuthor: '1 人',
+      docs: [],
+      changeCount: 3,
+      authorCount: 1,
+      documentCount: 1,
+    }
+    expect(changeCountOf(file)).toBe(3)
+    expect(statsOf([file])).toMatchObject({ files: 1, changes: 3, docs: 1, authors: 1 })
+  })
 })

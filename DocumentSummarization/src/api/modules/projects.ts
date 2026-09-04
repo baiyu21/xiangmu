@@ -168,7 +168,7 @@ function normalizeComment(raw: unknown) {
 function normalizeChangeDoc(raw: unknown): ChangeDoc | null {
   const row = asRecord(raw)
   if (!row) return null
-  const id = pickId(row.id) || pickString(row.code, row.record_code)
+  const id = pickId(row.id) || pickString(row.code, row.record_code, row.docId, row.doc_id)
   if (!id) return null
 
   const commentsRaw =
@@ -177,13 +177,39 @@ function normalizeChangeDoc(raw: unknown): ChangeDoc | null {
     (Array.isArray(row.comments) && row.comments) ||
     []
 
+  const docId = pickId(row.docId) || pickId(row.doc_id) || undefined
+
   return {
     id,
-    title: pickString(row.title, row.name, row.summary, id) || id,
-    at: pickString(row.at, row.changed_at, row.created_at, row.createdAt, row.time) || '',
+    title:
+      pickString(row.reason, row.title, row.name, row.requirementDesc, row.requirement_desc, id) ||
+      id,
+    at:
+      pickString(
+        row.date,
+        row.at,
+        row.changed_at,
+        row.created_at,
+        row.createdAt,
+        row.time,
+      ) || '',
     author: pickString(row.author, row.user_name, row.username, row.committer) || '',
-    summary: pickString(row.summary, row.description, row.desc, row.title) || '',
-    aiBrief: pickString(row.aiBrief, row.ai_brief, row.ai_summary, row.brief) || undefined,
+    summary:
+      pickString(
+        row.requirementDesc,
+        row.requirement_desc,
+        row.summary,
+        row.description,
+        row.desc,
+        row.note,
+        row.reason,
+        row.title,
+      ) || '',
+    aiBrief:
+      pickString(row.note, row.aiBrief, row.ai_brief, row.ai_summary, row.brief) || undefined,
+    docId: docId || undefined,
+    codeSnippet: pickString(row.codeSnippet, row.code_snippet, row.diff, row.patch) || undefined,
+    type: pickString(row.type, row.typeCode, row.type_code) || undefined,
     clientComments: commentsRaw
       .map((c) => normalizeComment(c))
       .filter((c): c is NonNullable<typeof c> => c != null),
@@ -194,9 +220,18 @@ export function normalizeMappedFile(raw: unknown, projectId: string): MappedFile
   const row = asRecord(raw)
   if (!row) return null
 
-  const id = pickId(row.id) || pickString(row.file_id, row.uuid)
-  const path = pickString(row.path, row.file_path, row.filepath, row.relative_path, row.name)
-  if (!id || !path) return null
+  const path = pickString(
+    row.file,
+    row.path,
+    row.file_path,
+    row.filepath,
+    row.relative_path,
+    row.name,
+  )
+  if (!path) return null
+
+  // 列表接口无 id：用路径作为稳定主键（路由跳转时需 encode）
+  const id = pickId(row.id) || pickString(row.file_id, row.uuid) || path
 
   const docsRaw =
     (Array.isArray(row.docs) && row.docs) ||
@@ -216,6 +251,9 @@ export function normalizeMappedFile(raw: unknown, projectId: string): MappedFile
   const authors = authorsFromField.length ? authorsFromField : authorsFromDocs
 
   const lastDoc = [...docs].sort((a, b) => (a.at < b.at ? 1 : -1))[0]
+  const changeCount = pickNumber(row.changeCount, row.change_count, row.changes)
+  const authorCount = pickNumber(row.authorCount, row.author_count, row.authors_count)
+  const documentCount = pickNumber(row.documentCount, row.document_count, row.docs_count)
 
   return {
     id,
@@ -223,12 +261,31 @@ export function normalizeMappedFile(raw: unknown, projectId: string): MappedFile
     module: pickString(row.module, row.module_name, row.moduleName, row.category, '未分类') || '未分类',
     path,
     authors,
-    lastAt: pickString(row.lastAt, row.last_at, row.updated_at, row.updatedAt, lastDoc?.at) || '',
+    lastAt:
+      pickString(
+        row.lastDate,
+        row.last_date,
+        row.lastAt,
+        row.last_at,
+        row.updated_at,
+        row.updatedAt,
+        lastDoc?.at,
+      ) || '',
     lastAuthor:
-      pickString(row.lastAuthor, row.last_author, row.updated_by, lastDoc?.author) || '',
+      pickString(row.lastAuthor, row.last_author, row.updated_by, lastDoc?.author) ||
+      (authorCount > 0 ? `${authorCount} 人` : ''),
     aiBrief: pickString(row.aiBrief, row.ai_brief, row.ai_summary, row.brief) || undefined,
     docs,
+    changeCount: changeCount || undefined,
+    authorCount: authorCount || undefined,
+    documentCount: documentCount || undefined,
   }
+}
+
+export function normalizeProjectFileList(raw: unknown, projectId: string): MappedFile[] {
+  return extractArray(raw)
+    .map((item) => normalizeMappedFile(item, projectId))
+    .filter((item): item is MappedFile => item != null)
 }
 
 export function normalizeProjectItem(raw: unknown): ProjectListItem | null {
@@ -348,6 +405,126 @@ export function fetchProjects() {
 
 export function fetchProject(id: string | number) {
   return request.get(`/v1/projects/${id}`)
+}
+
+/** 项目映射文件列表 */
+export function fetchProjectFiles(id: string | number) {
+  return request.get(`/v1/projects/${id}/files`)
+}
+
+export interface FileDetailPayload {
+  file: string
+}
+
+/** 解析 GET /projects/{id}/file-detail（含 records 修改历史） */
+export function normalizeFileDetail(raw: unknown, projectId: string): MappedFile | null {
+  const root = asRecord(raw) || {}
+  const data = asRecord(root.data) || root
+  return normalizeMappedFile(data, projectId)
+}
+
+/**
+ * 单文件修改历史详情
+ * 浏览器对 GET body 支持差，改走 query：?file=路径
+ * （Laravel 的 input('file') 可读 query）
+ */
+export function fetchProjectFileDetail(id: string | number, payload: FileDetailPayload) {
+  const file = payload.file?.trim()
+  if (!file) {
+    return Promise.reject(new Error('文件路径不能为空'))
+  }
+  return request.get(`/v1/projects/${id}/file-detail`, {
+    params: { file },
+  })
+}
+
+export interface ChangeDocQuery {
+  date: string
+}
+
+export interface ChangeDocItem {
+  id: string
+  module: string
+  file: string
+  type: string
+  typeCode?: string
+  scope?: string
+  note?: string
+  codeSnippet?: string
+}
+
+/** 按日期获取的修改文档详情 */
+export interface ChangeDocDetail {
+  id: string
+  date: string
+  author: string
+  requirementDesc: string
+  relatedReq: string
+  reason: string
+  impact: string
+  notice: string
+  sourceFile: string
+  rawContent: string
+  changeCount: number
+  items: ChangeDocItem[]
+}
+
+function normalizeChangeDocItem(raw: unknown): ChangeDocItem | null {
+  const row = asRecord(raw)
+  if (!row) return null
+  const id = pickId(row.id)
+  const file = pickString(row.file, row.path, row.file_path)
+  if (id == null || !file) return null
+  return {
+    id,
+    module: pickString(row.module, '未分类') || '未分类',
+    file,
+    type: pickString(row.type, row.typeCode, row.type_code, '修改') || '修改',
+    typeCode: pickString(row.typeCode, row.type_code) || undefined,
+    scope: pickString(row.scope) || undefined,
+    note: pickString(row.note, row.description) || undefined,
+    codeSnippet: pickString(row.codeSnippet, row.code_snippet) || undefined,
+  }
+}
+
+export function normalizeChangeDocDetail(raw: unknown): ChangeDocDetail | null {
+  const root = asRecord(raw) || {}
+  const data = asRecord(root.data) || root
+  const id = pickId(data.id)
+  const date = pickString(data.date, data.at, data.changed_at)
+  if (id == null || !date) return null
+
+  const itemsRaw = Array.isArray(data.items) ? data.items : []
+  return {
+    id,
+    date,
+    author: pickString(data.author) || '',
+    requirementDesc: pickString(data.requirementDesc, data.requirement_desc) || '',
+    relatedReq: pickString(data.relatedReq, data.related_req) || '',
+    reason: pickString(data.reason) || '',
+    impact: pickString(data.impact) || '',
+    notice: pickString(data.notice) || '',
+    sourceFile: pickString(data.sourceFile, data.source_file) || '',
+    rawContent: pickString(data.rawContent, data.raw_content, data.content) || '',
+    changeCount: pickNumber(data.changeCount, data.change_count, itemsRaw.length),
+    items: itemsRaw
+      .map((item) => normalizeChangeDocItem(item))
+      .filter((item): item is ChangeDocItem => item != null),
+  }
+}
+
+/**
+ * 修改文档详情（按日期）
+ * GET + query：?date=YYYY-MM-DD
+ */
+export function fetchChangeDoc(id: string | number, query: ChangeDocQuery) {
+  const date = query.date?.trim()
+  if (!date) {
+    return Promise.reject(new Error('日期不能为空'))
+  }
+  return request.get(`/v1/projects/${id}/change-docs`, {
+    params: { date },
+  })
 }
 
 export function createProject(payload: CreateProjectPayload) {

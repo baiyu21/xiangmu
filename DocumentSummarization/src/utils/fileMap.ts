@@ -14,6 +14,10 @@ export interface ChangeDoc {
   summary: string
   aiBrief?: string
   clientComments?: ClientComment[]
+  /** 关联文档 id（file-detail 的 docId） */
+  docId?: string
+  codeSnippet?: string
+  type?: string
 }
 
 export interface MappedFile {
@@ -26,6 +30,10 @@ export interface MappedFile {
   lastAuthor: string
   aiBrief?: string
   docs: ChangeDoc[]
+  /** 列表接口可能直接给计数（尚无 docs 明细时使用） */
+  changeCount?: number
+  authorCount?: number
+  documentCount?: number
 }
 
 export type MapMode = 'module' | 'repo'
@@ -40,6 +48,16 @@ export interface TreeNode {
 }
 
 export function changeCountOf(file: MappedFile): number {
+  if (typeof file.changeCount === 'number' && file.changeCount >= 0) {
+    return file.changeCount
+  }
+  return file.docs.length
+}
+
+export function documentCountOf(file: MappedFile): number {
+  if (typeof file.documentCount === 'number' && file.documentCount >= 0) {
+    return file.documentCount
+  }
   return file.docs.length
 }
 
@@ -47,15 +65,17 @@ export function statsOf(files: MappedFile[]) {
   const authors = new Set<string>()
   let changes = 0
   let docs = 0
+  let maxAuthorCount = 0
   for (const f of files) {
     f.authors.forEach((a) => authors.add(a))
     changes += changeCountOf(f)
-    docs += f.docs.length
+    docs += documentCountOf(f)
+    maxAuthorCount = Math.max(maxAuthorCount, f.authorCount ?? 0)
   }
   return {
     files: files.length,
     changes,
-    authors: authors.size,
+    authors: authors.size || maxAuthorCount,
     docs,
   }
 }
