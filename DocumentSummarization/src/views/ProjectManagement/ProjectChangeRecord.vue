@@ -150,30 +150,6 @@ function backToFile() {
 function backToMap() {
   void router.push({ name: 'project-overview', params: { id: projectId.value } })
 }
-
-function downloadMarkdown() {
-  if (!changeDoc.value) return
-  const content =
-    changeDoc.value.rawContent ||
-    [
-      `# ${changeDoc.value.date} · ${changeDoc.value.requirementDesc || changeDoc.value.reason}`,
-      '',
-      `- **修改人**: @${changeDoc.value.author}`,
-      `- **关联需求**: ${changeDoc.value.relatedReq}`,
-      `- **影响**: ${changeDoc.value.impact}`,
-      '',
-      changeDoc.value.reason,
-    ].join('\n')
-
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = changeDoc.value.sourceFile || `${changeDoc.value.date}.md`
-  a.click()
-  URL.revokeObjectURL(url)
-  ElMessage.success('已开始下载')
-}
 </script>
 
 <template>
@@ -198,9 +174,6 @@ function downloadMarkdown() {
         </div>
         <div class="header-actions">
           <button type="button" class="btn-ghost" @click="backToFile">返回文档详情</button>
-          <button type="button" class="btn-primary" @click="downloadMarkdown">
-            下载 .md
-          </button>
         </div>
       </header>
 

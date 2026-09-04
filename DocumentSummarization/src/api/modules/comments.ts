@@ -83,16 +83,19 @@ export function normalizeRecordComments(raw: unknown): ClientComment[] {
     .filter((item): item is ClientComment => item != null)
 }
 
-/** 获取某次修改记录的客户注释 */
-export function fetchRecordComments(recordId: string | number) {
-  return request.get(`/v1/records/${recordId}/comments`)
+/** 获取变更项下的留言（路径参数为 change_items 主键 changeItemId） */
+export function fetchRecordComments(changeItemId: string | number) {
+  return request.get(`/v1/records/${changeItemId}/comments`)
 }
 
-/** 发表客户注释 */
-export function createRecordComment(recordId: string | number, payload: CreateCommentPayload) {
+/** 发表变更项留言（路径参数为 change_items 主键 changeItemId） */
+export function createRecordComment(
+  changeItemId: string | number,
+  payload: CreateCommentPayload,
+) {
   const content = payload.content?.trim()
   if (!content) {
     return Promise.reject(new Error('注释内容不能为空'))
   }
-  return request.post(`/v1/records/${recordId}/comments`, { content })
+  return request.post(`/v1/records/${changeItemId}/comments`, { content })
 }

@@ -177,7 +177,13 @@ function normalizeChangeDoc(raw: unknown): ChangeDoc | null {
     (Array.isArray(row.comments) && row.comments) ||
     []
 
-  const docId = pickId(row.docId) || pickId(row.doc_id) || undefined
+  const docId =
+    pickId(row.change_documents_id) ||
+    pickId(row.change_document_id) ||
+    pickId(row.changeDocumentsId) ||
+    pickId(row.docId) ||
+    pickId(row.doc_id) ||
+    undefined
 
   return {
     id,
