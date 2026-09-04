@@ -214,23 +214,6 @@ async function updateToken() {
   }
 }
 
-async function deleteToken() {
-  if (tokenSaving.value) return
-  tokenSaving.value = true
-  try {
-    // 后端未单独提供删除接口时，用空字符串覆盖
-    await updateGithubToken({ github_token: '' })
-    tokenInput.value = ''
-    savedToken.value = ''
-    tokenConfigured.value = false
-    ElMessage.success('访问令牌已删除')
-  } catch {
-    // 拦截器已 Toast
-  } finally {
-    tokenSaving.value = false
-  }
-}
-
 /* ==================== 修改密码（邮箱验证码） ==================== */
 
 interface PasswordForm {
@@ -387,18 +370,8 @@ onUnmounted(() => {
         >
           <el-row :gutter="24">
             <el-col :span="12">
-              <el-form-item label="用户名" prop="username">
-                <el-input v-model="profile.username" placeholder="请输入用户名" maxlength="64" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="显示名" prop="displayName">
-                <el-input v-model="profile.displayName" placeholder="请输入显示名" maxlength="64" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="邮箱" prop="email">
-                <el-input v-model="profile.email" placeholder="请输入邮箱" maxlength="128" />
+              <el-form-item label="用户名" prop="username" >
+                <el-input v-model="profile.username" placeholder="请输入用户名" maxlength="64" disabled />
               </el-form-item>
             </el-col>
             <el-col :span="12">
@@ -413,6 +386,17 @@ onUnmounted(() => {
                 </el-select>
               </el-form-item>
             </el-col>
+            <el-col :span="12">
+              <el-form-item label="显示名" prop="displayName">
+                <el-input v-model="profile.displayName" placeholder="请输入显示名" maxlength="64" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="邮箱" prop="email">
+                <el-input v-model="profile.email" placeholder="请输入邮箱" maxlength="128" />
+              </el-form-item>
+            </el-col>
+
           </el-row>
           <div class="profile-footer">
             <el-button type="primary" :loading="profileSaving" @click="saveProfile">
@@ -422,7 +406,6 @@ onUnmounted(() => {
         </el-form>
       </div>
     </el-card>
-
     <div class="lower-row">
       <el-card class="card" shadow="never" v-loading="tokenLoading">
         <template #header>
@@ -458,15 +441,6 @@ onUnmounted(() => {
               @click="updateToken"
             >
               更新 Token
-            </el-button>
-            <el-button
-              type="danger"
-              plain
-              size="small"
-              :loading="tokenSaving"
-              @click="deleteToken"
-            >
-              删除 Token
             </el-button>
           </div>
         </div>
