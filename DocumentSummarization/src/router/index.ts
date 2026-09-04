@@ -12,7 +12,8 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/app',
+      redirect: '/login',
+      meta: { public: true },
     },
     {
       path: '/login',
