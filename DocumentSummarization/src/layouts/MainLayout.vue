@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter, useRoute, RouterView } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { logout } from '@/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -53,10 +55,25 @@ function navigate(name: string) {
   void router.push({ name })
 }
 
-const handleLogout = () => {
-  userStore.clearAuth()
-  sidebarOpen.value = false
-  void router.push({ name: 'login' })
+const loggingOut = ref(false)
+
+const handleLogout = async () => {
+  if (loggingOut.value) return
+  loggingOut.value = true
+  let ok = true
+  try {
+    // 调后端使当前 JWT 失效
+    await logout()
+  } catch {
+    // 拦截器已 Toast；本地仍需清理，保证用户能退出
+    ok = false
+  } finally {
+    userStore.clearAuth()
+    sidebarOpen.value = false
+    loggingOut.value = false
+    if (ok) ElMessage.success('已退出登录')
+    void router.push({ name: 'login' })
+  }
 }
 </script>
 
@@ -327,6 +344,11 @@ const handleLogout = () => {
 .logout-btn:hover {
   border-color: #ef4444;
   color: #ef4444;
+}
+
+.logout-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .content {

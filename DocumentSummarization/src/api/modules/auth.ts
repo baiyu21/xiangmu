@@ -127,6 +127,11 @@ export function login(payload: LoginPayload) {
   return request.post('/v1/auth/login', payload)
 }
 
+/** 登出：使当前 JWT 失效（需登录，无 Body） */
+export function logout() {
+  return request.post('/v1/auth/logout')
+}
+
 export function register(payload: RegisterPayload) {
   return request.post('/v1/auth/register', payload)
 }

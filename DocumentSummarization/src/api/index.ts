@@ -2,6 +2,7 @@ export { default as request } from './request'
 export { default } from './request'
 export {
   login,
+  logout,
   register,
   sendRegisterCode,
   sendPasswordChangeCode,
